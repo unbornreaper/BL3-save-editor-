@@ -150,4 +150,26 @@ t('Equip, duplicate and delete items keep slots consistent', () => {
   assert.strictEqual(ed.items[0].item.name, 'The Transformer');
 });
 
+console.log('Profile');
+t('Synthetic PS4 profile: bank, keys, god mode, round-trip', () => {
+  const g = BL3.file.readGvas(pcBytes);
+  const header = Object.assign({}, g.header, { sgType: 'OakProfile' });
+  const prof = BL3.pb.create('Profile', { bank_inventory_list: [BL3.Item.fromCode(CODES.crader).serialize()] });
+  const plain = BL3.pb.encode(prof, 'Profile');
+  const bytes = BL3.file.writeGvas(header, BL3.file.encryptPayload(plain, BL3.file.KEYS.profile.PS4), null);
+  const ed = BL3.open(bytes);
+  assert.ok(ed instanceof BL3.ProfileEditor);
+  assert.strictEqual(ed.file.platform, 'PS4');
+  assert.strictEqual(ed.bank.length, 1);
+  BL3.forge.godMode(ed, { opGear: true });
+  BL3.forge.runCommands(ed, 'modded fingerbiter');
+  const ed2 = BL3.open(ed.toBytes());
+  assert.strictEqual(ed2.file.platform, 'PS4');
+  assert.strictEqual(ed2.getKeys(BL3_DATA.consts.goldenkey_category), 999);
+  assert.strictEqual(ed2.bank.length, 2);
+  assert.strictEqual(ed2.bank[0].item.level, 72);
+  assert.ok(ed2.cosmeticsCount > 500);
+  assert.ok(ed2.guardianRank >= 3600);
+});
+
 console.log('\n' + passed + ' passed' + (process.exitCode ? ', SOME FAILED' : ''));

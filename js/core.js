@@ -725,12 +725,16 @@
       return 'other';
     }
     get rarity() {
-      const s = ((this.balance || '') + ' ' + this.name + ' ' + this.parts.join(' ')).toLowerCase();
-      if (/legendary|_05_/.test(s)) return 5;
-      if (/veryrare|very_rare|purple|_04_/.test(s)) return 4;
-      if (/_rare|blue|_03_/.test(s)) return 3;
+      const D_ = D();
+      if (!D_._rarityByBal) { D_._rarityByBal = {}; for (const c of D_.catalog) D_._rarityByBal[c.b.toLowerCase()] = c.r; }
+      const known = this.balance && D_._rarityByBal[this.balance.toLowerCase()];
+      if (known) return known;
+      const s = ((this.balance || '') + ' ' + this.name).toLowerCase();
+      const p = this.parts.join(' ').toLowerCase();
+      if (/legendary|_05_/.test(s) || /rarity_.*legendary|_05_legendary/.test(p)) return 5;
+      if (/veryrare|very_rare|purple|_04_/.test(s) || /rarity_.*veryrare|_04_veryrare/.test(p)) return 4;
+      if (/_rare|blue|_03_/.test(s) || /rarity_.*_rare|_03_rare/.test(p)) return 3;
       if (/uncommon|green|_02_/.test(s)) return 2;
-      if (/_unique|\/unique/.test(s)) return 5;
       if (/common|white|_01_/.test(s)) return 1;
       return 5;
     }

@@ -1,0 +1,11 @@
+{
+  "name": "vault-forge-bl3-save-editor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Borderlands 3 save editor for PS4/PS5 (Save Wizard decrypted) and PC saves. Runs in the browser.",
+  "license": "GPL-3.0",
+  "scripts": {
+    "build": "python3 tools/build_data.py && python3 tools/build_single.py",
+    "test": "node tests/test.js"
+  }
+}

@@ -631,6 +631,10 @@
           }
           case 'item': {
             let results = searchCatalog(c.query, c.filters);
+            if (c.filters.kind === 'com' && ctx.classToken && !c.query) {
+              const mine = results.filter(r => r.n.toLowerCase().includes(ctx.classToken.toLowerCase()));
+              if (mine.length) results = mine;
+            }
             if (!results.length && c.query) results = searchCatalog('', c.filters).length ? searchCatalog(c.query, {}) : [];
             if (!results.length) { log.push('❓ Couldn\'t find an item for "' + c.raw + '"'); break; }
             for (let i = 0; i < c.count; i++) {
