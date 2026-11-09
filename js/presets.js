@@ -102,5 +102,46 @@
     return { log, added, preset: p };
   }
 
-  BL3.presets = { list: PRESETS, run };
+  // ------------------------------------------------------------------ mystery loot
+  const LOOT_WEIGHTS = [['weapon', 60], ['shield', 10], ['grenade', 10], ['relic', 10], ['com', 10]];
+  const FILL_TO = { backpack: 40, bank: 100, vault: 25 };
+  function weightedKind() {
+    let r = Math.random() * 100;
+    for (const [k, w] of LOOT_WEIGHTS) { if ((r -= w) < 0) return k; }
+    return 'weapon';
+  }
+  /**
+   * Random legendary loot. opts: { kind: 'any'|'weapon'|..., mode: 'op'|'modded'|'mix', count, classToken, power }
+   * Returns [{ item, entry, mode, element }]
+   */
+  function randomLoot(opts = {}) {
+    const F = BL3.forge;
+    const count = Math.max(0, Math.min(200, opts.count || 1));
+    const out = [];
+    const pools = {};
+    const poolFor = (k) => {
+      if (!pools[k]) {
+        let r = F.searchCatalog('', { kind: k, rarity: 5 });
+        if (k === 'com' && opts.classToken) { const mine = r.filter(c => c.n.toLowerCase().includes(opts.classToken.toLowerCase())); if (mine.length) r = mine; }
+        pools[k] = r;
+      }
+      return pools[k];
+    };
+    for (let i = 0; i < count; i++) {
+      const kind = !opts.kind || opts.kind === 'any' ? weightedKind() : opts.kind;
+      const entry = pick(poolFor(kind));
+      if (!entry) continue;
+      const element = kind === 'weapon' ? pick([null, null, 'fire', 'shock', 'corrosive', 'cryo', 'radiation']) : null;
+      const mode = opts.mode === 'mix' ? (Math.random() < 0.5 ? 'op' : 'modded') : (opts.mode || 'op');
+      try {
+        const it = F.buildItem(entry, { element });
+        const ctx = { classToken: opts.classToken || '', power: mode === 'modded' && opts.mode === 'mix' ? 1 + Math.floor(Math.random() * 5) : (opts.power || 3) };
+        if (mode === 'modded') F.makeModded(it, ctx); else F.makeOP(it, ctx);
+        out.push({ item: it, entry, mode, element });
+      } catch (e) { i--; if (out.length + 50 < i) break; }
+    }
+    return out;
+  }
+
+  BL3.presets = { list: PRESETS, run, randomLoot, FILL_TO };
 })(typeof window !== 'undefined' ? window : globalThis);

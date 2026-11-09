@@ -45,6 +45,16 @@ That one file contains the whole editor.
 | **∞ INFINITE AMMO** | Max ammo SDUs and full ammo. Every gun also gets no-ammo / ammo-regen anointments, stacked magazines, and Infiniti parts where they fit. |
 | **∞ INFINITE GRENADES** | Max grenade SDU and full grenades. Grenades get the grenade-regen anointment, and class mods get stacked grenade capacity. |
 
+### 🎲 Loot Piñata (random loot, zero thinking)
+Can't decide what to mod? Whack the piñata and get random legendaries that are already OP or MODDED.
+* **What:** anything, or just guns / shields / grenades / relics / class mods (class mods match your character)
+* **Power:** 🔥 OP, ☢ MODDED, or 🎰 Mix (random, with random modded strength)
+* **Send to:** your backpack / bank, or your ⭐ Vault
+* **How many:** 1, 5, 10, 25, or 💥 **FILL IT UP** (backpack up to 40 items, bank up to 100, vault +25)
+
+The loot pops in one by one. Don't like it? Hit **🎲 Reroll** and that batch gets swapped for a new one.
+The Lazy Box takes it too: `loot 10`, `pinata 25 modded`, `surprise me`.
+
 ### 🎁 Loadout kits (one tap = whole loadout)
 Eight themed 8-piece kits: 4 guns, shield, grenade, a class mod for YOUR character, and a relic. On a character save they get auto-equipped. Pick 🔥 OP or ☢ MODDED:
 🔥 Fire Demon · ⚡ Shock Therapy · ❄ Ice Ice Baby · ☢ Chernobyl · 💀 Boss Deleter · ∞ Never Reload (infinite ammo kit on everything) · 🚀 Explosion Addict · 🎲 Chaos Roulette (random legendaries, random elements, pray).

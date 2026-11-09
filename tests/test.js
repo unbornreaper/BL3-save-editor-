@@ -194,6 +194,22 @@ t('Lazy box understands kits', () => {
   assert.strictEqual(ed.items.length, 24, log.join('\n'));
 });
 
+t('Loot piñata: random OP/MODDED legendaries of every kind, saves & reloads', () => {
+  const ed = BL3.open(pcBytes);
+  const kinds = new Set();
+  for (const kind of ['any', 'weapon', 'shield', 'grenade', 'relic', 'com']) {
+    const got = BL3.presets.randomLoot({ kind, mode: 'mix', count: 8, classToken: 'Operative' });
+    assert.strictEqual(got.length, 8, kind);
+    got.forEach(g => { kinds.add(g.item.kind); ed.addItem(g.item); if (kind !== 'any') assert.strictEqual(g.entry.k, kind); });
+  }
+  assert.ok(kinds.size >= 5);
+  const ed2 = BL3.open(ed.toBytes());
+  assert.strictEqual(ed2.items.length, 48);
+  assert.ok(ed2.items.every(e => e.item && e.item.canParseParts && e.item.level === 72));
+  const log = BL3.forge.runCommands(BL3.open(pcBytes), 'loot 7 modded');
+  assert.ok(/7 random MODDED/.test(log[0]), log[0]);
+});
+
 console.log('Profile');
 t('Synthetic PS4 profile: bank, keys, god mode, round-trip', () => {
   const g = BL3.file.readGvas(pcBytes);

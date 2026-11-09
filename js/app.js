@@ -196,9 +196,78 @@
         heroBtn('mod', 'MODDED BANK', 'Every bank item becomes stupid overpowered.', '☢', () => confirmModded(() => act(() => F.allItems(ed, it => F.makeModded(it, ctx())), n => X.say('moddedAll', { n }), 'modded'))),
       ));
     }
+    v.append(lootPanel());
     v.append(kitPanel());
     v.append(lazyBox());
   }
+  // ------------------------------------------------------------------ loot piñata
+  function lootPanel() {
+    const L = S.loot = S.loot || { kind: 'any', mode: 'mix', dest: 'file' };
+    const seg = (key, opts) => h('div', { class: 'seg' }, opts.map(([v_, l]) => h('button', { class: L[key] === v_ ? 'on' : '', onclick: () => { L[key] = v_; X.sfx('click'); render(); } }, l)));
+    const where = isProfile() ? 'bank' : 'backpack';
+    const have = L.dest === 'vault' ? X.vault.list().length : S.ed.items.length;
+    const fillTarget = L.dest === 'vault' ? BL3.presets.FILL_TO.vault + have : BL3.presets.FILL_TO[where];
+    const fillN = Math.max(0, fillTarget - (L.dest === 'vault' ? 0 : have)) || 0;
+    return h('div', { class: 'panel pinata', style: 'margin-bottom:16px' },
+      h('h3', null, '🎲 Loot Piñata', h('small', null, 'random legendaries, already OP / MODDED. Just whack it.')),
+      h('div', { class: 'loot-opts' },
+        h('div', null, h('div', { class: 'lo-l' }, 'WHAT'), seg('kind', [['any', '🎲 Anything'], ['weapon', '🔫 Guns'], ['shield', '🛡 Shields'], ['grenade', '💣 Nades'], ['relic', '🔮 Relics'], ['com', '🎓 COMs']])),
+        h('div', null, h('div', { class: 'lo-l' }, 'POWER'), seg('mode', [['op', '🔥 OP'], ['modded', '☢ MODDED'], ['mix', '🎰 Mix']])),
+        h('div', null, h('div', { class: 'lo-l' }, 'SEND TO'), seg('dest', [['file', isProfile() ? '🏦 Bank' : '🎒 Backpack'], ['vault', '⭐ Vault']]))),
+      h('div', { class: 'loot-btns' },
+        [1, 5, 10, 25].map(n => h('button', { class: 'btn loot', onclick: () => runLoot(n) }, h('b', null, n), n === 1 ? ' item' : ' items')),
+        h('button', { class: 'btn loot fill', disabled: !fillN, title: L.dest === 'vault' ? 'Adds 25 to your vault' : 'Tops your ' + where + ' up to ' + fillTarget + ' items', onclick: () => runLoot(fillN) },
+          '💥 FILL IT UP', h('small', null, fillN ? ' +' + fillN : ' (full, bro)'))));
+  }
+  function runLoot(n) {
+    const L = S.loot;
+    const go = () => {
+      const got = BL3.presets.randomLoot({ kind: L.kind, mode: L.mode, count: n, classToken: isProfile() ? '' : S.ed.classToken, power: S.power });
+      let vaultIds = [];
+      if (L.dest === 'vault') {
+        const before = new Set(X.vault.list().map(x => x.id));
+        got.forEach(g => X.vault.add(g.item));
+        vaultIds = X.vault.list().filter(x => !before.has(x.id)).map(x => x.id);
+        render();
+      } else {
+        snapshot();
+        got.forEach(g => S.ed.addItem(g.item, { favorite: true }));
+        render();
+      }
+      X.boom(got.some(g => g.mode === 'modded') ? 'modded' : 'op');
+      lootReveal(got, () => {
+        // reroll: take back this batch, roll again
+        if (L.dest === 'vault') { vaultIds.forEach(id => X.vault.remove(id)); render(); } else undo();
+        closeModal(); runLoot(n);
+      });
+    };
+    if (L.mode !== 'op' && !localStorage.getItem('vf_mod_ok')) confirmModded(go); else go();
+  }
+  const LOOT_LINES = ['The piñata has spoken.', 'RNGesus blessed you.', 'Free loot, no grinding. Gearbox is crying.', 'Fresh out the loot cave.', 'You didn\'t even have to kill anything.', 'Jackpot, baby.'];
+  function lootReveal(got, reroll) {
+    const L = S.loot;
+    const modded = got.filter(g => g.mode === 'modded').length;
+    const grid = h('div', { class: 'reveal' }, got.map((g, i) => {
+      const est = BL3.stats.estimate(g.item);
+      const card = h('div', { class: 'rv r' + g.item.rarity + (g.mode === 'modded' ? ' mod' : ''), style: 'animation-delay:' + Math.min(i * 70, 2500) + 'ms' },
+        h('div', { class: 'rv-k' }, KIND_ICON[g.item.kind] + (g.mode === 'modded' ? ' ☢ MODDED' : ' 🔥 OP') + (g.element ? ' · ' + g.element : '')),
+        h('div', { class: 'rv-n' }, g.entry.n),
+        est && est.vibe.length ? h('div', { class: 'rv-v' }, T(est.vibe.slice(0, 2).join(' · '))) : null);
+      if (i < 12) setTimeout(() => X.sfx(g.mode === 'modded' ? 'chunk' : 'coin'), Math.min(i * 70, 2500));
+      return card;
+    }));
+    modal(h('div', null,
+      h('div', { class: 'modal-head' },
+        h('div', null, h('h2', null, '🎲 ', h('span', { class: 'glowup' }, 'LOOT DROP!')), h('div', null, T(LOOT_LINES[Math.floor(Math.random() * LOOT_LINES.length)]) + ' ' + got.length + ' legendaries' + (modded ? ', ' + modded + ' of them modded' : '') + ' → ' + (L.dest === 'vault' ? 'your Vault' : (isProfile() ? 'your Bank' : 'your Backpack')) + '.')),
+        h('button', { class: 'btn ghost x', onclick: () => { closeModal(); render(); } }, '✕')),
+      grid,
+      h('div', { class: 'row', style: 'margin-top:14px' },
+        h('button', { class: 'btn primary big', onclick: () => { closeModal(); render(); } }, 'SICK, KEEP \'EM'),
+        h('button', { class: 'btn mod big', onclick: reroll }, '🎲 Reroll'),
+        h('span', { class: 'spacer' }),
+        L.dest !== 'vault' ? h('button', { class: 'btn', onclick: () => { closeModal(); S.tab = 'inv'; render(); } }, 'Show me →') : h('button', { class: 'btn', onclick: () => { closeModal(); S.tab = 'vault'; render(); } }, 'Open Vault →'))));
+  }
+
   function kitPanel() {
     S.kitMode = S.kitMode || 'modded';
     return h('div', { class: 'panel', style: 'margin-bottom:16px' },
@@ -426,7 +495,7 @@
     });
     const title = kind === 'ammo' ? X.say('ammo') : X.say(kind, { name: it.name });
     modal(h('div', { class: 'compare' },
-      h('div', { class: 'modal-head' }, h('div', null, h('h2', { class: 'glowup' }, kind === 'modded' ? '☢ GLOW-UP' : kind === 'op' ? '🔥 GLOW-UP' : '∞ GLOW-UP'), h('div', null, title)),
+      h('div', { class: 'modal-head' }, h('div', null, h('h2', null, kind === 'modded' ? '☢ ' : kind === 'op' ? '🔥 ' : '∞ ', h('span', { class: 'glowup' }, 'GLOW-UP')), h('div', null, title)),
         h('button', { class: 'btn ghost x', onclick: () => { closeModal(); render(); } }, '✕')),
       h('div', { class: 'stats' }, rows.length ? h('div', { class: 'stat-bars' }, rows) : h('p', { class: 'muted' }, 'No stat bars for this item type, but trust me, it\'s better now.')),
       h('div', { class: 'row', style: 'margin-top:14px' },

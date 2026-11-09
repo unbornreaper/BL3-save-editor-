@@ -527,6 +527,7 @@
     '3x op legendary shock jakobs shotgun',
     'modded relic  /  op shield  /  modded grenade  /  modded com',
     'random legendary  /  5x random modded weapon',
+    'loot 10  /  pinata 25 modded  /  surprise me',
     'kit fire  /  boss deleter  /  never reload  /  chaos roulette',
     'BL3(....)   ← paste item codes (any amount)',
   ];
@@ -556,6 +557,9 @@
       if (/^tvhm|true vault hunter/.test(line)) { out.push({ type: 'tvhm' }); continue; }
       if (/^unlock (all )?cosmetics|^cosmetics/.test(line)) { out.push({ type: 'cosmetics' }); continue; }
       if (/^help$|^\?$/.test(line)) { out.push({ type: 'help' }); continue; }
+      if ((m = /^(?:loot|pinata|piñata|surprise me|random loot)\s*(\d+)?\s*(op|modded|mix)?\s*(\d+)?/.exec(line)) && /^(loot|pinata|piñata|surprise|random loot)/.test(line)) {
+        out.push({ type: 'loot', count: Math.min(100, +(m[1] || m[3] || 5)), mode: m[2] || 'mix' }); continue;
+      }
       if (BL3.presets) {
         const pm = /^(?:kit|loadout|preset|build)s? (.+)$/.exec(line);
         const key = (pm ? pm[1] : line).replace(/^(op|modded) /, '').replace(/ (kit|loadout)$/, '');
@@ -614,7 +618,8 @@
     for (const c of cmds) {
       try {
         switch (c.type) {
-          case 'preset': { const r = BL3.presets.run(ed, c.id, { mode: c.mode, power: ctx.power }); log.push(r.preset.icon + ' ' + r.preset.name + ' kit: ' + r.log.join(', ') + (isProfile ? '' : ' (all equipped)')); break; }
+          case 'loot': { const got = BL3.presets.randomLoot({ count: c.count, mode: c.mode, classToken: ctx.classToken, power: ctx.power }); for (const g of got) ed.addItem(g.item, { favorite: true }); log.push('🎲 Loot piñata: ' + got.length + ' random ' + (c.mode === 'mix' ? 'OP/MODDED' : c.mode.toUpperCase()) + ' legendaries: ' + got.slice(0, 6).map(g => g.entry.n).join(', ') + (got.length > 6 ? '…' : '')); break; }
+                    case 'preset': { const r = BL3.presets.run(ed, c.id, { mode: c.mode, power: ctx.power }); log.push(r.preset.icon + ' ' + r.preset.name + ' kit: ' + r.log.join(', ') + (isProfile ? '' : ' (all equipped)')); break; }
           case 'help': log.push('Try: ' + HELP.join('  •  ')); break;
           case 'god': godMode(ed).forEach(l => log.push('⚡ ' + l)); break;
           case 'infammo': if (needSave('infinite ammo')) infiniteAmmo(ed).forEach(l => log.push('∞ ' + l)); break;

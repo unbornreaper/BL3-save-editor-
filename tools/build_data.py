@@ -175,9 +175,18 @@ def rarity(bal_lower, name):
     return 5
 
 
+def pretty_name(n):
+    """'Otto Idol (dedicated drop only) Legendary Artifact' -> 'Otto Idol'"""
+    n = n.replace(' (dedicated drop only)', '')
+    m = re.match(r'^(.*) Legendary (Artifact|COM)$', n)
+    if m and m.group(1).strip() not in ('Beastmaster', 'Gunner', 'Operative', 'Siren', ''):
+        n = m.group(1)
+    return n
+
+
 def main():
     serialdb = load('inventoryserialdb.json.xz')
-    names = load('balance_name_mapping.json.xz')
+    names = {k: pretty_name(v) for k, v in load('balance_name_mapping.json.xz').items()}
     invkeys = load('balance_to_inv_key.json.xz')
     consts = load('apoc_consts.json.xz')
     partnames = load('fdh_part_name_mapping.json.xz')
