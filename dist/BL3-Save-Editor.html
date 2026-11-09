@@ -1169,13 +1169,32 @@ window.BL3_DATA = {"serialdb":{"InventoryData":{"versions":[{"version":1,"bits":
     return { verdict, fix, report };
   }
 
-  function saveFile(file, platformOverride) {
+  // A real BL3 GVAS header (from a retail save), used when converting a
+  // Save Wizard JSON file into a .sav that other editors understand.
+  const HEADER_TEMPLATE = 'R1ZBUwIAAAAEAgAABAAUAAMA4JsegBIAAABPQUstUEFERElFU0VMMS0zOQADAAAAOwAAALKUg7nQSQZRa+sMmUIQXkoAAAAA17o8YDpAnOCTFWSL1hLthAAAAAC4AvR3SkLZaQnrF7FLxgsyAAAAAMwdApV8QMMbC9iinrAHcAMBAAAAHJjlmdtMRCw/9kq5o9E81QAAAAAC0PF2L0NX7KACgbJZi4fLAAAAAO0KMRFhTVUuo5pnrywIocURAAAAEuQm+01LFR8KVXKTcC8dlgMAAAASCLkfoEu7LFvPer1o9IVWAgAAAMYCcLgESTgddqE1qDcDG9sCAAAAItVUnL5PJqhGByGU0IK0YREAAADkMtiwDU+JH7d+z6yiSv02CgAAAChDxuFTTSyiho5so4y9F2QAAAAAPMFeN/tI5AbwhAC1fnEqJgIAAADtaLDk6UKU9AvaMaJBu0YuGAAAAD90/M+ARLBD3xSRk3MgHRciAAAAtUkrsOlEILu3MgSjYAPkUgIAAABcEOSktUmhWcRAxafu335UAAAAAMkxyDncR+ZaF5xEmnyOHD4AAAAAMxvweJhP6uvqhLS5olq5zAAAAAAPODFm4ENNLSfPCYBaqVZpAAAAAJ+L+BL8SnWIDNl8pim9OjgaAAAATOdaexBMcNKYV1ipWiohCwkAAAAYaSnX3UvWHahk4p2EOME8AgAAAHhSocL+Sue//5AXbFX3HVMBAAAA1KOsbsFM7EDti4a3xY9CCQMAAABM+xaHmUb0LxbUDKvTR4YwAgAAAN115SknRqPgdtIQnercLCMRAAAA7Gwma49Lxx7Z5AujB/xCCQEAAABhPfcN6kc/oumJJ7eaSUEMAQAAAIYYHWCET2Ss3tMWqtbH6g0MAAAA1rz/nVgBT0mCEiHiiKiSPAEAAADCAZfyx0eGhAQc8bNrxyGsCwAAABjwVLnWTWLJsXlOp8IToY4QAAAASOvUA8NMC7VB3pilk8lsXOCbHgAZTQxDcElUcWmbaYflsJDfCwAAAL0y/qoUTJVTJV5qtt3RMhABAAAAjuGvI1hO4UxSwmGNt75TuQkAAADqt2KkOk6Z9B/swZmy4SSCAgAAAL39tS4QTawBj/M2gdqlkzMFAAAATzWdUC9J5vayhUmnHGM8BwAAAADs29wXA0PXr1/1UqDqPJv5BQAAAI58AAPoET8pZVBmvxRdLPMBAAAA7KylhOcRQ0KFDJmyHmAZ/AEAAAAXQSpIuidylCR9uLcCoz7KAwAAAEDrVkrcEfUQfjTTkudqybICAAAAoDhAOqZFISt6Os6HlpMEawEAAAAASorXl0ZY6LUZqLq0Rn1IEAAAAApfU0gQRRfk6vHhlMFHOqAFAAAAhvh5VR9MOpN7CLqDL7lhYwEAAABSvi9hC0BT2pFPDZF8hbGfAQAAADZ6I6TJQerK+Biij/MbaFgEAAAA8gpo+6NL71m1Gai6PUTIcwEAAAC5IuO0+Ud+2ldvf7+9Hjf0AQAAABkEcPppRxja8SVdjd0HxRoAAAAACH8IpgdEM4n66IqOwryzUAAAAAAsXcDMskOfr8YirqaaA9kQAAAAAO+mOmPVRMmU4Oo3mQ7kTv4BAAAAKPwifvlnLAttnfAdEAKX1AAAAAAMAAAAT2FrU2F2ZUdhbWUA';
+  function templateHeader(kind) {
+    const raw = b64decode(HEADER_TEMPLATE);
+    const g = readGvas(concat([raw, new Uint8Array(4)]));
+    g.header.sgType = kind === 'profile' ? 'OakProfile' : 'OakSaveGame';
+    return g.header;
+  }
+  /**
+   * format: 'json' (Save Wizard text) or 'gvas' (real .sav). Defaults to the format it was loaded in.
+   * platform: 'PS4' | 'PC' for gvas.
+   */
+  function saveFile(file, platformOverride, format) {
     const typeName = file.kind === 'profile' ? 'Profile' : 'Character';
-    if (file.format === 'json') {
-      let text = pbToJson(file.data, typeName) + (file.json.trailingNewline ? '\n' : '');
-      if (file.json.crlf) text = text.replace(/\n/g, '\r\n');
+    format = format || (file.format === 'json' ? 'json' : 'gvas');
+    if (format === 'json') {
+      const style = file.json || { bom: false, crlf: false, trailingNewline: true };
+      let text = pbToJson(file.data, typeName) + (style.trailingNewline ? '\n' : '');
+      if (style.crlf) text = text.replace(/\n/g, '\r\n');
       const body = te.encode(text);
-      return file.json.bom ? concat([new Uint8Array([0xEF, 0xBB, 0xBF]), body]) : body;
+      return style.bom ? concat([new Uint8Array([0xEF, 0xBB, 0xBF]), body]) : body;
+    }
+    if (!file.header) {
+      const plainJ = BL3.pb.encode(file.data, typeName);
+      return writeGvas(templateHeader(file.kind), encryptPayload(plainJ, KEYS[file.kind][platformOverride || 'PS4']), null);
     }
     const plain = BL3.pb.encode(file.data, typeName);
     const enc = encryptPayload(plain, KEYS[file.kind][platformOverride || file.platform]);
@@ -3322,6 +3341,7 @@ window.BL3_DEMO = "R1ZBUwIAAAAEAgAABAAUAAMA4JsegBIAAABPQUstUEFERElFU0VMMS0zOQADA
       S.original = bytes;
       S.undo = [];
       S.savePlatform = S.ed.file.platform;
+      S.saveAs = S.ed.file.format === 'json' ? 'sw' : (S.ed.file.platform === 'PC' ? 'pc' : 'ps4');
       S.tab = 'dash';
       $('#landing').hidden = true;
       $('#editor').hidden = false;
@@ -3355,15 +3375,26 @@ window.BL3_DEMO = "R1ZBUwIAAAAEAgAABAAUAAMA4JsegBIAAABPQUstUEFERElFU0VMMS0zOQADA
     document.body.append(a); a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
   }
+  const SAVE_AS_HELP = {
+    sw: 'Saves in Save Wizard\'s format with the same name. Use this to put it back on your PS4/PS5.',
+    json: 'Saves the same Save Wizard text as a .json file.',
+    ps4: 'Saves a real PS4 .sav. Other BL3 editors can open this one. Convert back to Save Wizard format before putting it on your console.',
+    pc: 'Saves a PC .sav (for PC players / PC editors).',
+  };
   function saveFile() {
     try {
       S.ed.commitItems();
-      const bytes = BL3.file.save(S.ed.file, S.savePlatform);
+      const mode = S.saveAs || 'ps4';
+      const format = mode === 'sw' || mode === 'json' ? 'json' : 'gvas';
+      const platform = mode === 'pc' ? 'PC' : 'PS4';
+      const bytes = BL3.file.save(S.ed.file, platform, format);
       // sanity check: make sure what we wrote loads back
-      BL3.file.load(bytes, S.savePlatform);
-      download(bytes, S.fileName);
+      BL3.file.load(bytes, format === 'gvas' ? platform : undefined);
+      const base = S.fileName.replace(/\.(sav|json|txt|html)$/i, '');
+      const name = mode === 'sw' ? (S.ed.file.format === 'json' ? S.fileName : base) : mode === 'json' ? base + '.json' : base + '.sav';
+      download(bytes, name);
       X.boom('save');
-      toast(X.say('saved', { file: S.fileName }) + (S.ed.file.format === 'json' ? ' Same Save Wizard format, keep the name "' + S.fileName + '" and import it back.' : ' (' + S.savePlatform + ' format)'), 'ok');
+      toast(X.say('saved', { file: name }) + ' ' + SAVE_AS_HELP[mode], 'ok');
     } catch (e) {
       console.error(e);
       toast(X.say('err', { msg: 'save failed — ' + e.message }), 'err');
@@ -3434,8 +3465,11 @@ window.BL3_DEMO = "R1ZBUwIAAAAEAgAABAAUAAMA4JsegBIAAABPQUstUEFERElFU0VMMS0zOQADA
       h('span', { class: 'tag ' + (ed.file.platform === 'PS4' ? 'ps4' : '') }, ed.file.format === 'json' ? 'PS4 · Save Wizard' : ed.file.platform),
       isProfile() ? h('b', null, 'PROFILE') : h('span', null, h('b', null, ed.name || 'Unnamed'), ' · ', ed.className, ' · Lvl ', ed.level),
       h('span', { class: 'muted' }, S.fileName),
-      ed.file.format === 'json' ? null : h('select', { title: 'Save format', onchange: (e) => { S.savePlatform = e.target.value; toast('Will save as ' + S.savePlatform + ' format'); } },
-        ['PS4', 'PC'].map(x => h('option', { value: x, selected: S.savePlatform === x }, 'Save as ' + x)))
+      h('select', { title: 'Save format / convert', onchange: (e) => { S.saveAs = e.target.value; toast(SAVE_AS_HELP[S.saveAs]); } },
+        (ed.file.format === 'json'
+          ? [['sw', 'Save as: Save Wizard file (same name)'], ['json', 'Save as: .json'], ['ps4', 'Convert: PS4 .sav (other editors)'], ['pc', 'Convert: PC .sav']]
+          : [['ps4', 'Save as: PS4 .sav'], ['pc', 'Save as: PC .sav'], ['sw', 'Convert: Save Wizard JSON']]
+        ).map(([v_, l]) => h('option', { value: v_, selected: S.saveAs === v_ }, l)))
     ].filter(Boolean));
   }
 

@@ -722,13 +722,32 @@
     return { verdict, fix, report };
   }
 
-  function saveFile(file, platformOverride) {
+  // A real BL3 GVAS header (from a retail save), used when converting a
+  // Save Wizard JSON file into a .sav that other editors understand.
+  const HEADER_TEMPLATE = 'R1ZBUwIAAAAEAgAABAAUAAMA4JsegBIAAABPQUstUEFERElFU0VMMS0zOQADAAAAOwAAALKUg7nQSQZRa+sMmUIQXkoAAAAA17o8YDpAnOCTFWSL1hLthAAAAAC4AvR3SkLZaQnrF7FLxgsyAAAAAMwdApV8QMMbC9iinrAHcAMBAAAAHJjlmdtMRCw/9kq5o9E81QAAAAAC0PF2L0NX7KACgbJZi4fLAAAAAO0KMRFhTVUuo5pnrywIocURAAAAEuQm+01LFR8KVXKTcC8dlgMAAAASCLkfoEu7LFvPer1o9IVWAgAAAMYCcLgESTgddqE1qDcDG9sCAAAAItVUnL5PJqhGByGU0IK0YREAAADkMtiwDU+JH7d+z6yiSv02CgAAAChDxuFTTSyiho5so4y9F2QAAAAAPMFeN/tI5AbwhAC1fnEqJgIAAADtaLDk6UKU9AvaMaJBu0YuGAAAAD90/M+ARLBD3xSRk3MgHRciAAAAtUkrsOlEILu3MgSjYAPkUgIAAABcEOSktUmhWcRAxafu335UAAAAAMkxyDncR+ZaF5xEmnyOHD4AAAAAMxvweJhP6uvqhLS5olq5zAAAAAAPODFm4ENNLSfPCYBaqVZpAAAAAJ+L+BL8SnWIDNl8pim9OjgaAAAATOdaexBMcNKYV1ipWiohCwkAAAAYaSnX3UvWHahk4p2EOME8AgAAAHhSocL+Sue//5AXbFX3HVMBAAAA1KOsbsFM7EDti4a3xY9CCQMAAABM+xaHmUb0LxbUDKvTR4YwAgAAAN115SknRqPgdtIQnercLCMRAAAA7Gwma49Lxx7Z5AujB/xCCQEAAABhPfcN6kc/oumJJ7eaSUEMAQAAAIYYHWCET2Ss3tMWqtbH6g0MAAAA1rz/nVgBT0mCEiHiiKiSPAEAAADCAZfyx0eGhAQc8bNrxyGsCwAAABjwVLnWTWLJsXlOp8IToY4QAAAASOvUA8NMC7VB3pilk8lsXOCbHgAZTQxDcElUcWmbaYflsJDfCwAAAL0y/qoUTJVTJV5qtt3RMhABAAAAjuGvI1hO4UxSwmGNt75TuQkAAADqt2KkOk6Z9B/swZmy4SSCAgAAAL39tS4QTawBj/M2gdqlkzMFAAAATzWdUC9J5vayhUmnHGM8BwAAAADs29wXA0PXr1/1UqDqPJv5BQAAAI58AAPoET8pZVBmvxRdLPMBAAAA7KylhOcRQ0KFDJmyHmAZ/AEAAAAXQSpIuidylCR9uLcCoz7KAwAAAEDrVkrcEfUQfjTTkudqybICAAAAoDhAOqZFISt6Os6HlpMEawEAAAAASorXl0ZY6LUZqLq0Rn1IEAAAAApfU0gQRRfk6vHhlMFHOqAFAAAAhvh5VR9MOpN7CLqDL7lhYwEAAABSvi9hC0BT2pFPDZF8hbGfAQAAADZ6I6TJQerK+Biij/MbaFgEAAAA8gpo+6NL71m1Gai6PUTIcwEAAAC5IuO0+Ud+2ldvf7+9Hjf0AQAAABkEcPppRxja8SVdjd0HxRoAAAAACH8IpgdEM4n66IqOwryzUAAAAAAsXcDMskOfr8YirqaaA9kQAAAAAO+mOmPVRMmU4Oo3mQ7kTv4BAAAAKPwifvlnLAttnfAdEAKX1AAAAAAMAAAAT2FrU2F2ZUdhbWUA';
+  function templateHeader(kind) {
+    const raw = b64decode(HEADER_TEMPLATE);
+    const g = readGvas(concat([raw, new Uint8Array(4)]));
+    g.header.sgType = kind === 'profile' ? 'OakProfile' : 'OakSaveGame';
+    return g.header;
+  }
+  /**
+   * format: 'json' (Save Wizard text) or 'gvas' (real .sav). Defaults to the format it was loaded in.
+   * platform: 'PS4' | 'PC' for gvas.
+   */
+  function saveFile(file, platformOverride, format) {
     const typeName = file.kind === 'profile' ? 'Profile' : 'Character';
-    if (file.format === 'json') {
-      let text = pbToJson(file.data, typeName) + (file.json.trailingNewline ? '\n' : '');
-      if (file.json.crlf) text = text.replace(/\n/g, '\r\n');
+    format = format || (file.format === 'json' ? 'json' : 'gvas');
+    if (format === 'json') {
+      const style = file.json || { bom: false, crlf: false, trailingNewline: true };
+      let text = pbToJson(file.data, typeName) + (style.trailingNewline ? '\n' : '');
+      if (style.crlf) text = text.replace(/\n/g, '\r\n');
       const body = te.encode(text);
-      return file.json.bom ? concat([new Uint8Array([0xEF, 0xBB, 0xBF]), body]) : body;
+      return style.bom ? concat([new Uint8Array([0xEF, 0xBB, 0xBF]), body]) : body;
+    }
+    if (!file.header) {
+      const plainJ = BL3.pb.encode(file.data, typeName);
+      return writeGvas(templateHeader(file.kind), encryptPayload(plainJ, KEYS[file.kind][platformOverride || 'PS4']), null);
     }
     const plain = BL3.pb.encode(file.data, typeName);
     const enc = encryptPayload(plain, KEYS[file.kind][platformOverride || file.platform]);

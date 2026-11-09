@@ -82,6 +82,19 @@ t('Save Wizard JSON: loads, round-trips byte-identical, edits survive', () => {
   assert.strictEqual(ed2.items.length, 8);
   assert.ok(ed2.items.every(e => e.item && e.item.canParseParts));
 });
+t('Converter: Save Wizard JSON <-> PS4/PC .sav', () => {
+  const json = new TextEncoder().encode(BL3.pbjson.fromPb(sample.data, 'Character') + '\n');
+  const f = BL3.file.load(json);
+  for (const plat of ['PS4', 'PC']) {
+    const sav = BL3.file.save(f, plat, 'gvas');
+    const g = BL3.file.load(sav);
+    assert.strictEqual(g.platform, plat);
+    assert.strictEqual(g.format, undefined);
+    assert.ok(BL3.util.bytesEqual(g.plain, sample.plain), plat);
+    // and back to Save Wizard JSON, identical to where we started
+    assert.ok(BL3.util.bytesEqual(BL3.file.save(g, undefined, 'json'), json));
+  }
+});
 t('JSON float / int64 formatting matches protobuf C++ printer', () => {
   const g = BL3.pbjson.jsonFloat;
   assert.strictEqual(g(3), '3');

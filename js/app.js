@@ -56,6 +56,7 @@
       S.original = bytes;
       S.undo = [];
       S.savePlatform = S.ed.file.platform;
+      S.saveAs = S.ed.file.format === 'json' ? 'sw' : (S.ed.file.platform === 'PC' ? 'pc' : 'ps4');
       S.tab = 'dash';
       $('#landing').hidden = true;
       $('#editor').hidden = false;
@@ -89,15 +90,26 @@
     document.body.append(a); a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
   }
+  const SAVE_AS_HELP = {
+    sw: 'Saves in Save Wizard\'s format with the same name. Use this to put it back on your PS4/PS5.',
+    json: 'Saves the same Save Wizard text as a .json file.',
+    ps4: 'Saves a real PS4 .sav. Other BL3 editors can open this one. Convert back to Save Wizard format before putting it on your console.',
+    pc: 'Saves a PC .sav (for PC players / PC editors).',
+  };
   function saveFile() {
     try {
       S.ed.commitItems();
-      const bytes = BL3.file.save(S.ed.file, S.savePlatform);
+      const mode = S.saveAs || 'ps4';
+      const format = mode === 'sw' || mode === 'json' ? 'json' : 'gvas';
+      const platform = mode === 'pc' ? 'PC' : 'PS4';
+      const bytes = BL3.file.save(S.ed.file, platform, format);
       // sanity check: make sure what we wrote loads back
-      BL3.file.load(bytes, S.savePlatform);
-      download(bytes, S.fileName);
+      BL3.file.load(bytes, format === 'gvas' ? platform : undefined);
+      const base = S.fileName.replace(/\.(sav|json|txt|html)$/i, '');
+      const name = mode === 'sw' ? (S.ed.file.format === 'json' ? S.fileName : base) : mode === 'json' ? base + '.json' : base + '.sav';
+      download(bytes, name);
       X.boom('save');
-      toast(X.say('saved', { file: S.fileName }) + (S.ed.file.format === 'json' ? ' Same Save Wizard format, keep the name "' + S.fileName + '" and import it back.' : ' (' + S.savePlatform + ' format)'), 'ok');
+      toast(X.say('saved', { file: name }) + ' ' + SAVE_AS_HELP[mode], 'ok');
     } catch (e) {
       console.error(e);
       toast(X.say('err', { msg: 'save failed — ' + e.message }), 'err');
@@ -168,8 +180,11 @@
       h('span', { class: 'tag ' + (ed.file.platform === 'PS4' ? 'ps4' : '') }, ed.file.format === 'json' ? 'PS4 · Save Wizard' : ed.file.platform),
       isProfile() ? h('b', null, 'PROFILE') : h('span', null, h('b', null, ed.name || 'Unnamed'), ' · ', ed.className, ' · Lvl ', ed.level),
       h('span', { class: 'muted' }, S.fileName),
-      ed.file.format === 'json' ? null : h('select', { title: 'Save format', onchange: (e) => { S.savePlatform = e.target.value; toast('Will save as ' + S.savePlatform + ' format'); } },
-        ['PS4', 'PC'].map(x => h('option', { value: x, selected: S.savePlatform === x }, 'Save as ' + x)))
+      h('select', { title: 'Save format / convert', onchange: (e) => { S.saveAs = e.target.value; toast(SAVE_AS_HELP[S.saveAs]); } },
+        (ed.file.format === 'json'
+          ? [['sw', 'Save as: Save Wizard file (same name)'], ['json', 'Save as: .json'], ['ps4', 'Convert: PS4 .sav (other editors)'], ['pc', 'Convert: PC .sav']]
+          : [['ps4', 'Save as: PS4 .sav'], ['pc', 'Save as: PC .sav'], ['sw', 'Convert: Save Wizard JSON']]
+        ).map(([v_, l]) => h('option', { value: v_, selected: S.saveAs === v_ }, l)))
     ].filter(Boolean));
   }
 

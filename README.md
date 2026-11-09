@@ -25,6 +25,7 @@ That one file contains the whole editor.
 2. On your PC, open **Save Wizard** → pick the BL3 save → **Advanced Mode** → **Decrypt**, then export the files.
    * Character saves are named `1`, `2`, … (one per character). Inside they're **JSON text**, and that's normal. Vault Forge reads and writes Save Wizard's JSON directly. Don't rename them.
    * `profile` holds the bank, golden keys, guardian rank and cosmetics.
+   * **Other BL3 editors can't read Save Wizard's JSON.** Open it in Vault Forge, pick **Convert: PS4 .sav** in the top bar and save. That gives you a real `.sav` other editors accept. To go back, open the `.sav` here and pick **Convert: Save Wizard JSON**.
    * Never open & save the file in Notepad/TextEdit first, that can break it. If a file won't open, the **🩺 Save Doctor** tells you why.
 3. Open the decrypted `.sav` in Vault Forge. It detects PS4 vs PC on its own.
 4. Edit away, then press **💾 Save file**.
