@@ -65,8 +65,22 @@
       toast(isProfile() ? X.say('loadedProfile') : X.say('loaded', { name: S.ed.name || 'Vault Hunter', level: S.ed.level, platform: S.ed.file.platform }), 'ok');
     } catch (e) {
       console.error(e);
-      toast(X.say('openFail', { msg: e.message }), 'err');
+      X.boom('error');
+      saveDoctor(bytes, name, e);
     }
+  }
+  function saveDoctor(bytes, name, e) {
+    const d = BL3.file.diagnose(bytes, e);
+    modal(h('div', null,
+      h('div', { class: 'modal-head' }, h('div', null, h('h2', null, '🩺 Save Doctor'), h('div', { class: 'muted' }, (name || 'file') + ' · ' + bytes.length.toLocaleString() + ' bytes')), h('button', { class: 'btn ghost x', onclick: closeModal }, '✕')),
+      h('div', { class: 'panel', style: 'border-color:#5a1f1f;background:#1d1012' }, h('b', { style: 'font-size:16px' }, '❌ ' + d.verdict)),
+      h('h3', { style: 'font:900 18px var(--display);margin:14px 0 6px' }, 'How to fix it'),
+      h('ol', { style: 'line-height:1.6;margin:0 0 12px' }, d.fix.map(f => h('li', null, f))),
+      h('p', { class: 'muted', style: 'font-size:13px' }, 'Tip: the file name doesn\'t matter. "2" and "2.sav" both work. What matters is what\'s inside.'),
+      h('details', null, h('summary', { class: 'muted', style: 'cursor:pointer' }, 'Technical report'), h('textarea', { class: 'code-box', readonly: true, style: 'min-height:160px' }, d.report)),
+      h('div', { class: 'row', style: 'margin-top:12px' },
+        h('button', { class: 'btn primary', onclick: () => copy(d.report, 'Report copied. Paste it to whoever is helping you.') }, '📋 Copy report'),
+        h('button', { class: 'btn', onclick: () => { closeModal(); pickFile(); } }, '📂 Try another file'))));
   }
   function pickFile() { $('#fileInput').value = ''; $('#fileInput').click(); }
   function download(bytes, name) {

@@ -416,10 +416,19 @@
     finish() { return concat(this.chunks); }
   }
 
+  function findGvas(buf) {
+    const lim = Math.min(buf.length - 4, 65536);
+    for (let i = 0; i <= lim; i++) if (buf[i] === 0x47 && buf[i + 1] === 0x56 && buf[i + 2] === 0x41 && buf[i + 3] === 0x53) return i;
+    return -1;
+  }
   function readGvas(buf) {
+    // some tools leave extra bytes in front of the real save; skip them (and keep them for saving)
+    const at = findGvas(buf);
+    if (at < 0) throw new Error('This is not a decrypted BL3 file (missing GVAS header). On PS4/PS5, decrypt it with Save Wizard first.');
+    const prefix = at > 0 ? buf.slice(0, at) : null;
+    if (at > 0) buf = buf.subarray(at);
     const r = new BinReader(buf);
-    const magic = td.decode(r.bytes(4));
-    if (magic !== 'GVAS') throw new Error('This is not a decrypted BL3 file (missing GVAS header). On PS4/PS5, decrypt it with Save Wizard first.');
+    r.bytes(4);
     const h = {};
     h.sgVersion = r.u32();
     h.pkgVersion = r.u32();
@@ -433,12 +442,14 @@
     for (let i = 0; i < n; i++) h.custom.push([r.bytes(16).slice(), r.u32()]);
     h.sgType = r.str();
     const len = r.u32();
+    if (len > buf.length - r.pos) throw new Error('The save is cut off: it says it has ' + len + ' bytes of data but only ' + (buf.length - r.pos) + ' are there. The file got truncated or damaged.');
     const payload = r.bytes(len).slice();
     const trailing = buf.length - r.pos;
-    return { header: h, payload, trailing: trailing > 0 ? buf.slice(r.pos) : null };
+    return { header: h, payload, prefix, trailing: trailing > 0 ? buf.slice(r.pos) : null };
   }
-  function writeGvas(header, payload, trailing) {
+  function writeGvas(header, payload, trailing, prefix) {
     const w = new BinWriter();
+    if (prefix) w.bytes(prefix);
     w.bytes(te.encode('GVAS'));
     w.u32(header.sgVersion); w.u32(header.pkgVersion);
     w.u16(header.engMajor); w.u16(header.engMinor); w.u16(header.engPatch);
@@ -458,45 +469,105 @@
    * Load a decrypted (Save Wizard) PS4 or a PC .sav file.
    * Returns { kind: 'save'|'profile', platform: 'PS4'|'PC', header, data, trailing }
    */
+  function textEditorDamage(buf) {
+    let n = 0;
+    for (let i = 0; i + 2 < buf.length; i++) if (buf[i] === 0xEF && buf[i + 1] === 0xBF && buf[i + 2] === 0xBD) { if (++n >= 3) return true; }
+    return buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF;
+  }
   function loadFile(buf, forcePlatform) {
+    if (textEditorDamage(buf)) throw new Error('This file was saved by a text editor and is damaged.');
     const g = readGvas(buf);
     const sgType = typeof g.header.sgType === 'string' ? g.header.sgType : '';
-    const isProfile = /profile/i.test(sgType);
-    const kind = isProfile ? 'profile' : 'save';
-    const typeName = isProfile ? 'Profile' : 'Character';
+    // trust the header's type, but if it's odd try both character and profile
+    const kinds = /profile/i.test(sgType) ? ['profile'] : /savegame/i.test(sgType) ? ['save'] : ['save', 'profile'];
     const platforms = forcePlatform ? [forcePlatform] : ['PS4', 'PC'];
     const attempts = [];
-    for (const p of platforms) {
+    for (const kind of kinds) for (const p of platforms) {
+      const typeName = kind === 'profile' ? 'Profile' : 'Character';
       try {
         const plain = decryptPayload(g.payload, KEYS[kind][p]);
         const stats = { unknown: 0, badStrings: 0 };
         const data = BL3.pb.decode(plain, typeName, stats);
         let score = stats.unknown * 10 + stats.badStrings * 10;
-        if (!isProfile) {
+        if (kind === 'save') {
           const cls = data.player_class_data && data.player_class_data.player_class_path;
           if (!cls || !cls.startsWith('/Game/')) score += 1000;
-        }
-        attempts.push({ p, data, score, plain });
+        } else if (!data.bank_inventory_list && !data.profile_sdu_list) score += 1000;
+        attempts.push({ kind, p, data, score, plain });
       } catch (e) {
-        attempts.push({ p, error: e.message, score: Infinity });
+        attempts.push({ kind, p, error: e.message, score: Infinity });
       }
     }
     attempts.sort((a, b) => a.score - b.score);
     const best = attempts[0];
     if (!best || best.score >= 1000) {
-      throw new Error('Could not decode this file as a BL3 ' + kind + ' for PS4 or PC. Make sure it was decrypted with Save Wizard (PS4) and is a BL3 save/profile.');
+      const err = new Error('Could not decode this file as a BL3 save or profile for PS4 or PC.');
+      err.attempts = attempts.map(a => a.kind + '/' + a.p + ': ' + (a.error || 'score ' + a.score));
+      throw err;
     }
-    return { kind, platform: best.p, header: g.header, data: best.data, trailing: g.trailing, plain: best.plain };
+    return { kind: best.kind, platform: best.p, header: g.header, data: best.data, trailing: g.trailing, prefix: g.prefix, plain: best.plain };
+  }
+
+  /** Plain-English diagnosis of a file that won't open. */
+  function diagnose(buf, error) {
+    const size = buf.length;
+    const head = Array.from(buf.subarray(0, 48), b => b.toString(16).padStart(2, '0')).join(' ');
+    const ascii = Array.from(buf.subarray(0, 48), b => (b >= 32 && b < 127 ? String.fromCharCode(b) : '.')).join('');
+    let replacement = 0;
+    for (let i = 0; i + 2 < size; i++) if (buf[i] === 0xEF && buf[i + 1] === 0xBF && buf[i + 2] === 0xBD) replacement++;
+    const counts = new Array(256).fill(0);
+    const sample = buf.subarray(0, Math.min(size, 65536));
+    for (const b of sample) counts[b]++;
+    let entropy = 0;
+    for (const c of counts) if (c) { const q = c / sample.length; entropy -= q * Math.log2(q); }
+    const gv = findGvas(buf);
+    let verdict, fix;
+    if (size < 64) {
+      verdict = 'This file is basically empty (' + size + ' bytes).';
+      fix = ['Export the save again from Save Wizard.', 'Make sure you pick the big file (a BL3 character save is usually 100 KB – 2 MB).'];
+    } else if (replacement >= 3 || (buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF)) {
+      verdict = 'This file was opened and SAVED in a text editor, and that broke it. Text editors swap the binary bytes for junk characters when they save.';
+      fix = ['Don\'t save it from Notepad / TextEdit / any text app. Opening is OK, but never hit save.', 'Go back to Save Wizard and export / decrypt the save again to get a clean copy.', 'Open that fresh file here directly.'];
+    } else if (buf[0] === 0x00 && buf[1] === 0x50 && buf[2] === 0x53 && buf[3] === 0x46) {
+      verdict = 'That\'s the PlayStation info file (param.sfo), not the actual save.';
+      fix = ['In the decrypted folder, pick the file named just a number (like "1" or "2") or "profile".'];
+    } else if (buf[0] === 0x7B || buf[0] === 0x3C) {
+      verdict = 'This is a text file (JSON / HTML), not a save.';
+      fix = ['Pick the decrypted save from Save Wizard instead.'];
+    } else if (gv < 0 && entropy > 7.5) {
+      verdict = 'This file is still ENCRYPTED. It looks like random noise, so Save Wizard hasn\'t decrypted it yet.';
+      fix = ['In Save Wizard: select the BL3 save → Advanced Mode → Decrypt (or "Decrypt All") → then export / save the decrypted file.', 'Open that decrypted file here.'];
+    } else if (gv < 0) {
+      verdict = 'This doesn\'t look like a Borderlands 3 save. The "GVAS" marker every BL3 save starts with is missing.';
+      fix = ['Make sure it\'s Borderlands 3 (not BL2 / Tiny Tina\'s Wonderlands / the Pre-Sequel).', 'Pick the file named like "1", "2"… or "profile" from the decrypted save folder.'];
+    } else {
+      verdict = 'The file has a proper BL3 header, but the save data inside didn\'t decode with the PS4 or PC keys.';
+      fix = ['Export a fresh decrypted copy from Save Wizard and try again.', 'If it still fails, tap "Copy report" and send it over so it can get fixed.'];
+    }
+    let sgType = '';
+    try { if (gv >= 0) { const g = readGvas(buf); sgType = String(g.header.sgType); } } catch (e) { sgType = 'header error: ' + e.message; }
+    const report = [
+      'VAULT FORGE file report',
+      'size: ' + size + ' bytes',
+      'GVAS at: ' + gv,
+      'type: ' + sgType,
+      'entropy: ' + entropy.toFixed(2),
+      'text-editor damage: ' + replacement,
+      'first bytes: ' + head,
+      'as text: ' + ascii,
+      'error: ' + (error ? error.message : ''),
+    ].concat(error && error.attempts ? error.attempts.map(a => '  ' + a) : []).join('\n');
+    return { verdict, fix, report };
   }
 
   function saveFile(file, platformOverride) {
     const typeName = file.kind === 'profile' ? 'Profile' : 'Character';
     const plain = BL3.pb.encode(file.data, typeName);
     const enc = encryptPayload(plain, KEYS[file.kind][platformOverride || file.platform]);
-    return writeGvas(file.header, enc, file.trailing);
+    return writeGvas(file.header, enc, file.trailing, file.prefix);
   }
 
-  BL3.file = { load: loadFile, save: saveFile, readGvas, writeGvas, decryptPayload, encryptPayload, KEYS };
+  BL3.file = { load: loadFile, save: saveFile, readGvas, writeGvas, decryptPayload, encryptPayload, diagnose, KEYS };
 
   // ======================================================================
   // Item serials

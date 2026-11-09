@@ -46,6 +46,21 @@ t('Platform conversion PS4 -> PC', () => {
   assert.ok(BL3.util.bytesEqual(pc, pcBytes));
 });
 
+t('Save Doctor: text-editor damage, still-encrypted, wrong file', () => {
+  const dmg = new Uint8Array(pcBytes); for (let i = 300; i < 330; i += 3) { dmg[i] = 0xEF; dmg[i + 1] = 0xBF; dmg[i + 2] = 0xBD; }
+  assert.ok(/text editor/i.test(BL3.file.diagnose(dmg).verdict));
+  assert.throws(() => BL3.file.load(dmg), /text editor/);
+  const rnd = new Uint8Array(200000); for (let i = 0; i < rnd.length; i++) rnd[i] = (i * 2654435761 >>> 13) & 255;
+  assert.ok(/ENCRYPTED/.test(BL3.file.diagnose(rnd).verdict));
+  assert.ok(/param\.sfo/.test(BL3.file.diagnose(new Uint8Array([0, 0x50, 0x53, 0x46].concat(new Array(200).fill(1)))).verdict));
+});
+t('Extra bytes before GVAS are tolerated and kept', () => {
+  const pre = new Uint8Array(16).fill(7);
+  const buf = BL3.util.concat([pre, pcBytes]);
+  const f = BL3.file.load(buf);
+  assert.ok(BL3.util.bytesEqual(BL3.file.save(f), buf));
+});
+
 console.log('Item serials');
 t('Known codes decode', () => {
   const a = BL3.Item.fromCode(CODES.crader);
