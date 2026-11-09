@@ -34,9 +34,14 @@
     }
     return el;
   }
+  const X = window.VFX;
+  const T = (s_) => X.clean(s_);
   function toast(msg, kind = '') {
-    const t = h('div', { class: 'toast ' + kind }, msg);
+    if (kind === 'err') X.sfx('error');
+    const t = h('div', { class: 'toast ' + kind }, T(String(msg)));
     $('#toasts').append(t);
+    const all = $('#toasts').children;
+    while (all.length > (innerWidth < 640 ? 2 : 4)) all[0].remove();
     setTimeout(() => { t.style.transition = 'opacity .4s'; t.style.opacity = '0'; setTimeout(() => t.remove(), 400); }, kind === 'err' ? 7000 : 3200);
   }
   const fmt = (n) => Number(n || 0).toLocaleString();
@@ -56,11 +61,11 @@
       $('#editor').hidden = false;
       $('#btnSave').disabled = false;
       render();
-      const what = isProfile() ? 'Profile' : (S.ed.name || 'Character') + ' — ' + S.ed.className;
-      toast('Loaded ' + what + ' (' + S.ed.file.platform + ' save)', 'ok');
+      X.boom('kit');
+      toast(isProfile() ? X.say('loadedProfile') : X.say('loaded', { name: S.ed.name || 'Vault Hunter', level: S.ed.level, platform: S.ed.file.platform }), 'ok');
     } catch (e) {
       console.error(e);
-      toast('Could not open file: ' + e.message, 'err');
+      toast(X.say('openFail', { msg: e.message }), 'err');
     }
   }
   function pickFile() { $('#fileInput').value = ''; $('#fileInput').click(); }
@@ -77,10 +82,11 @@
       // sanity check: make sure what we wrote loads back
       BL3.file.load(bytes, S.savePlatform);
       download(bytes, S.fileName);
-      toast('Saved ' + S.fileName + ' (' + S.savePlatform + '). Now put it back with Save Wizard!', 'ok');
+      X.boom('save');
+      toast(X.say('saved', { file: S.fileName }) + ' (' + S.savePlatform + ' format)', 'ok');
     } catch (e) {
       console.error(e);
-      toast('Save failed: ' + e.message, 'err');
+      toast(X.say('err', { msg: 'save failed — ' + e.message }), 'err');
     }
   }
   function snapshot() {
@@ -99,25 +105,27 @@
     S.ed = isProfile() ? new BL3.ProfileEditor(f) : new BL3.SaveEditor(f);
     $('#btnUndo').disabled = !S.undo.length;
     render();
-    toast('Undone');
+    X.sfx('click');
+    toast(X.say('undo'));
   }
   /** run an editing action with undo + re-render */
-  function act(fn, msg) {
+  function act(fn, msg, fx) {
     snapshot();
     try {
       const r = fn();
       render();
+      if (fx) X.boom(fx);
       if (msg) toast(typeof msg === 'function' ? msg(r) : msg, 'ok');
       return r;
     } catch (e) {
       console.error(e);
-      toast(e.message, 'err');
+      toast(X.say('err', { msg: e.message }), 'err');
     }
   }
 
   // ------------------------------------------------------------------ render root
-  const TABS_SAVE = [['dash', '⚡ Command Center'], ['inv', '🎒 Backpack'], ['forge', '🔨 Forge'], ['char', '👤 Character']];
-  const TABS_PROF = [['dash', '⚡ Command Center'], ['inv', '🏦 Bank'], ['forge', '🔨 Forge'], ['char', '🗝 Profile']];
+  const TABS_SAVE = [['dash', '⚡ Command Center'], ['inv', '🎒 Backpack'], ['forge', '🔨 Forge'], ['char', '👤 Character'], ['vault', '⭐ Vault']];
+  const TABS_PROF = [['dash', '⚡ Command Center'], ['inv', '🏦 Bank'], ['forge', '🔨 Forge'], ['char', '🗝 Profile'], ['vault', '⭐ Vault']];
 
   function render() {
     if (!S.ed) return;
@@ -126,13 +134,14 @@
     tabs.innerHTML = '';
     for (const [id, label] of (isProfile() ? TABS_PROF : TABS_SAVE)) {
       const t = h('div', { class: 'tab' + (S.tab === id ? ' active' : ''), onclick: () => { S.tab = id; render(); } }, label,
-        id === 'inv' ? h('span', { class: 'count' }, S.ed.items.length) : null);
+        id === 'inv' ? h('span', { class: 'count' }, S.ed.items.length) : id === 'vault' ? h('span', { class: 'count' }, X.vault.list().length) : null);
       tabs.append(t);
     }
     document.querySelectorAll('.view').forEach(v => {
       const on = v.dataset.view === S.tab;
       v.classList.toggle('active', on);
-      if (on) { v.innerHTML = ''; ({ dash: viewDash, inv: viewInv, forge: viewForge, char: viewChar })[S.tab](v); }
+      if (!on) v.innerHTML = '';
+      if (on) { v.innerHTML = ''; ({ dash: viewDash, inv: viewInv, forge: viewForge, char: viewChar, vault: viewVault })[S.tab](v); }
     });
   }
 
@@ -166,10 +175,10 @@
       ));
       v.append(h('div', { class: 'grid g3', style: 'margin-bottom:16px' },
         heroBtn('god', 'GOD MODE', 'Lvl 72, max cash & eridium, all SDUs, full ammo, every slot, Mayhem 10, TVHM, huge Guardian Rank, skill points, all vehicles.', '⚡', openGodModal),
-        heroBtn('op', 'OP EVERYTHING', 'Every item in your backpack → level 72, Mayhem 10 and the best anointment for your class.', '🔥', () => act(() => F.allItems(ed, it => F.makeOP(it, ctx())), n => '🔥 ' + n + ' items are now OP')),
-        heroBtn('mod', 'MODDED EVERYTHING', 'Stupid overpowered. Stacks parts, elements & up to 15 anointments on every item. Offline fun only.', '☢', () => confirmModded(() => act(() => F.allItems(ed, it => F.makeModded(it, ctx())), n => '☢ ' + n + ' items are now MODDED'))),
-        heroBtn('inf', '∞ INFINITE AMMO', 'Max ammo + SDUs, plus no-ammo / ammo-regen anointments, stacked mags & Infiniti parts on every gun.', '∞', () => act(() => F.infiniteAmmo(ed), l => '∞ ' + l.join(' · '))),
-        heroBtn('nade', '∞ INFINITE GRENADES', 'Max grenade SDU + full grenades, grenade-regen anointment on nades, stacked grenade capacity on class mods.', '💣', () => act(() => F.runCommands(ed, 'infinite grenades'), l => l.join(' · '))),
+        heroBtn('op', 'OP EVERYTHING', 'Every item in your backpack → level 72, Mayhem 10 and the best anointment for your class.', '🔥', () => act(() => F.allItems(ed, it => F.makeOP(it, ctx())), n => '🔥 ' + X.say('opAll', { n }), 'op')),
+        heroBtn('mod', 'MODDED EVERYTHING', 'Stupid overpowered. Stacks parts, elements & up to 15 anointments on every item. Offline fun only.', '☢', () => confirmModded(() => act(() => F.allItems(ed, it => F.makeModded(it, ctx())), n => X.say('moddedAll', { n }), 'modded'))),
+        heroBtn('inf', '∞ INFINITE AMMO', 'Max ammo + SDUs, plus no-ammo / ammo-regen anointments, stacked mags & Infiniti parts on every gun.', '∞', () => act(() => F.infiniteAmmo(ed), () => X.say('ammo'), 'op')),
+        heroBtn('nade', '∞ INFINITE GRENADES', 'Max grenade SDU + full grenades, grenade-regen anointment on nades, stacked grenade capacity on class mods.', '💣', () => act(() => F.runCommands(ed, 'infinite grenades'), () => X.say('nades'), 'op')),
         heroBtn('', 'NEW GEAR', 'Build any legendary in the game from scratch — weapons, shields, grenades, relics, class mods.', '🔨', () => { S.tab = 'forge'; render(); }),
       ));
       v.lastChild.lastChild.style.cssText = 'background:linear-gradient(135deg,#3a3a46,#1f1f27);color:#fff';
@@ -182,12 +191,24 @@
         statCard('Cosmetics', fmt(ed.cosmeticsCount), 'unlocked'),
       ));
       v.append(h('div', { class: 'grid g3', style: 'margin-bottom:16px' },
-        heroBtn('god', 'GOD PROFILE', '999 of every key, max bank SDUs, Guardian Rank 200 in every reward, every skin / head / emote / trinket / weapon skin.', '⚡', () => act(() => F.godMode(ed, {}), l => '⚡ ' + l.join(' · '))),
-        heroBtn('op', 'OP BANK', 'Every bank item → level 72, Mayhem 10 + best anointment.', '🔥', () => act(() => F.allItems(ed, it => F.makeOP(it, ctx())), n => '🔥 ' + n + ' bank items OP')),
-        heroBtn('mod', 'MODDED BANK', 'Every bank item becomes stupid overpowered.', '☢', () => confirmModded(() => act(() => F.allItems(ed, it => F.makeModded(it, ctx())), n => '☢ ' + n + ' bank items MODDED'))),
+        heroBtn('god', 'GOD PROFILE', '999 of every key, max bank SDUs, Guardian Rank 200 in every reward, every skin / head / emote / trinket / weapon skin.', '⚡', () => act(() => F.godMode(ed, {}), () => '⚡ ' + X.say('god'), 'god')),
+        heroBtn('op', 'OP BANK', 'Every bank item → level 72, Mayhem 10 + best anointment.', '🔥', () => act(() => F.allItems(ed, it => F.makeOP(it, ctx())), n => '🔥 ' + X.say('opAll', { n }), 'op')),
+        heroBtn('mod', 'MODDED BANK', 'Every bank item becomes stupid overpowered.', '☢', () => confirmModded(() => act(() => F.allItems(ed, it => F.makeModded(it, ctx())), n => X.say('moddedAll', { n }), 'modded'))),
       ));
     }
+    v.append(kitPanel());
     v.append(lazyBox());
+  }
+  function kitPanel() {
+    S.kitMode = S.kitMode || 'modded';
+    return h('div', { class: 'panel', style: 'margin-bottom:16px' },
+      h('h3', null, '🎁 Loadout Kits', h('small', null, 'one tap = 8 themed items' + (isProfile() ? ' dropped in your bank' : ', auto-equipped')),
+        h('span', { class: 'spacer' }),
+        h('div', { class: 'mode-pick', style: 'grid-template-columns:repeat(2,110px)' }, [['op', '🔥 OP'], ['modded', '☢ MODDED']].map(([m, l]) => h('button', { 'data-m': m, class: S.kitMode === m ? 'on' : '', style: 'padding:6px', onclick: () => { S.kitMode = m; render(); } }, l)))),
+      h('div', { class: 'kits' }, BL3.presets.list.map(p => h('button', { class: 'kit', style: '--kc:' + p.color, onclick: () => {
+        const go = () => act(() => BL3.presets.run(S.ed, p.id, { mode: S.kitMode, power: S.power }), r => X.say('kit', { icon: p.icon, name: p.name }) + ' (' + r.added.length + ' items)', S.kitMode === 'modded' ? 'modded' : 'kit');
+        if (S.kitMode === 'modded') confirmModded(go); else go();
+      } }, h('span', { class: 'ki' }, p.icon), h('b', null, p.name), h('span', null, T(p.desc))))));
   }
   function statCard(label, big, sub) {
     return h('div', { class: 'panel' }, h('div', { class: 'muted', style: 'font-size:12px;text-transform:uppercase;letter-spacing:.6px' }, label), h('div', { class: 'stat-big' }, big), h('div', { class: 'muted', style: 'font-size:13px' }, sub));
@@ -212,7 +233,7 @@
         opt('vehicles', 'Unlock all vehicles, parts & skins'), opt('opGear', 'Also make every item OP')),
       h('label', { class: 'field', style: 'margin:12px 0;max-width:320px' }, 'Guardian tokens per reward (18 rewards)',
         h('input', { type: 'number', min: 1, max: 5000, value: o.guardianTokens, oninput: e => { o.guardianTokens = Math.max(1, +e.target.value || 1); } })),
-      h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'btn god big', onclick: () => { closeModal(); act(() => F.godMode(S.ed, o), l => '⚡ GOD MODE: ' + l.join(' · ')); } }, '⚡ BECOME A GOD'))));
+      h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'btn god big', onclick: () => { closeModal(); act(() => F.godMode(S.ed, o), () => '⚡ ' + X.say('god'), 'god'); } }, '⚡ BECOME A GOD'))));
   }
 
   // ------------------------------------------------------------------ lazy box
@@ -230,6 +251,7 @@
       S.lazyLog = lines.concat(S.lazyLog).slice(0, 80);
       const added = S.ed.items.length - before;
       render();
+      X.boom(/GOD/i.test(lines.join(' ')) ? 'god' : /☢/.test(lines.join(' ')) ? 'modded' : 'op');
       toast(lines.slice(0, 3).join(' · ') + (lines.length > 3 ? ' …' : '') + (added > 0 ? ' → check your ' + (isProfile() ? 'Bank' : 'Backpack') : ''), lines.some(l => /^[✖❓]/.test(l)) ? 'err' : 'ok');
     };
     ta.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) run(); });
@@ -308,16 +330,18 @@
         h('span', null, it.parts.length + ' parts'),
         it.canParseParts ? null : h('span', { class: 'badge' }, 'level-only edit')),
       anoints.length ? h('div', { class: 'anoint' }, '✦ ' + F.anointName(anoints[0]) + (anoints.length > 1 ? '  (+' + (anoints.length - 1) + ' more)' : '')) : null,
-      (() => { const est = BL3.stats.estimate(it); return est && est.vibe.length ? h('div', { class: 'vibe', onclick: () => openStats(it), title: 'Tap for full stats' }, est.vibe.join('  ·  ')) : null; })(),
+      (() => { const est = BL3.stats.estimate(it); return est && est.vibe.length ? h('div', { class: 'vibe', onclick: () => openStats(it), title: 'Tap for full stats' }, T(est.vibe.join('  ·  '))) : null; })(),
       h('div', { class: 'actions' },
-        h('button', { class: 'btn op sm', title: 'Level 72 + Mayhem 10 + best anointment', onclick: () => act(() => F.makeOP(it, ctx()), '🔥 ' + it.name + ' is OP') }, '🔥 OP'),
-        h('button', { class: 'btn mod sm', title: 'Stupid overpowered', onclick: () => confirmModded(() => act(() => F.makeModded(it, ctx()), '☢ ' + it.name + ' is MODDED')) }, '☢ MODDED'),
-        it.kind === 'weapon' || it.kind === 'grenade' ? h('button', { class: 'btn inf sm', title: 'Ammo regen kit', onclick: () => act(() => F.makeAmmoKit(it, ctx()), '∞ ammo kit on ' + it.name) }, '∞') : null,
+        h('button', { class: 'btn op sm', title: 'Level 72 + Mayhem 10 + best anointment', onclick: () => upgrade(it, 'op') }, '🔥 OP'),
+        h('button', { class: 'btn mod sm', title: 'Stupid overpowered', onclick: () => confirmModded(() => upgrade(it, 'modded')) }, '☢ MODDED'),
+        it.kind === 'weapon' || it.kind === 'grenade' ? h('button', { class: 'btn inf sm', title: 'Ammo regen kit', onclick: () => upgrade(it, 'ammo') }, '∞') : null,
         h('button', { class: 'btn sm', onclick: () => openItem(i) }, '✎ Edit'),
         h('button', { class: 'btn sm', title: 'Stats & part info', onclick: () => openStats(it) }, '📊'),
-        h('button', { class: 'btn sm', title: 'Duplicate', onclick: () => act(() => ed.duplicateItem(i), 'Duplicated ' + it.name) }, '⧉'),
-        h('button', { class: 'btn sm', title: 'Copy BL3 code', onclick: () => copy(it.code(), 'Code copied') }, '📋'),
-        h('button', { class: 'btn danger sm', title: 'Delete', onclick: () => act(() => ed.removeItem(i), 'Deleted ' + it.name) }, '🗑')));
+        h('button', { class: 'btn sm', title: 'Save to your Vault', onclick: () => toVault(it) }, '⭐'),
+        h('button', { class: 'btn sm', title: 'Share card (image)', onclick: () => shareItem(it) }, '🖼'),
+        h('button', { class: 'btn sm', title: 'Duplicate', onclick: () => act(() => ed.duplicateItem(i), X.say('dup', { name: it.name }), 'kit') }, '⧉'),
+        h('button', { class: 'btn sm', title: 'Copy BL3 code', onclick: () => copy(it.code(), X.say('copied')) }, '📋'),
+        h('button', { class: 'btn danger sm', title: 'Delete', onclick: () => act(() => ed.removeItem(i), X.say('del', { name: it.name }), 'delete') }, '🗑')));
   }
 
   function copy(text, msg) {
@@ -352,7 +376,7 @@
               try { const it = BL3.Item.fromCode(c.replace(/\s+/g, '')); if (md) F.makeModded(it, ctx()); else if (op) F.makeOP(it, ctx()); S.ed.addItem(it); n++; } catch (e) { bad++; }
             }
             return [n, bad];
-          }, ([n, bad]) => 'Imported ' + n + ' items' + (bad ? ' (' + bad + ' bad codes skipped)' : ''));
+          }, ([n, bad]) => X.say('imported', { n }) + (bad ? ' (' + bad + ' bad codes skipped)' : ''), 'kit');
         } }, 'Import'))));
   }
   function exportCodesModal() {
@@ -374,10 +398,65 @@
       est.bars.length ? h('div', { class: 'stat-bars' }, est.bars.map(b => h('div', { class: 'stat-row' + (b.value > 10.5 ? ' over' : '') },
         h('span', { class: 'sl' }, b.icon + ' ' + b.label),
         h('div', { class: 'sbar' }, h('i', { style: 'width:' + Math.min(100, b.value * 10) + '%' })),
-        h('span', { class: 'st' }, b.text)))) : null,
-      est.traits.length ? h('ul', { class: 'traits' }, est.traits.slice(0, opts.maxTraits || 40).map(t => h('li', null, t))) : null,
+        h('span', { class: 'st' }, T(b.text))))) : null,
+      est.traits.length ? h('ul', { class: 'traits' }, est.traits.slice(0, opts.maxTraits || 40).map(t => h('li', null, T(t)))) : null,
       h('div', { class: 'muted', style: 'font-size:11px;margin-top:6px' }, 'Estimated from the item\'s parts, rarity, level, Mayhem and anointments. These are ratings, not exact in-game numbers.'));
   }
+  /** OP / MODDED / ammo kit one item, then show the before/after glow-up */
+  function upgrade(it, kind) {
+    const before = BL3.stats.estimate(it);
+    const fn = kind === 'op' ? F.makeOP : kind === 'modded' ? F.makeModded : F.makeAmmoKit;
+    const r = act(() => fn(it, ctx()), X.settings.compare ? null : (kind === 'ammo' ? X.say('ammo') : X.say(kind, { name: it.name })), kind === 'ammo' ? 'op' : kind);
+    if (r !== undefined && X.settings.compare) openCompare(it, before, BL3.stats.estimate(it), kind);
+  }
+  function openCompare(it, before, after, kind) {
+    if (!before || !after) return;
+    const old = {};
+    before.bars.forEach(b => { old[b.key] = b; });
+    const rows = after.bars.map(b => {
+      const o = old[b.key] || { value: 0, text: '' };
+      const d = Math.round((b.value - o.value) * 10) / 10;
+      const bar = h('i', { class: 'new', style: 'width:' + Math.min(100, o.value * 10) + '%' });
+      requestAnimationFrame(() => requestAnimationFrame(() => { bar.style.width = Math.min(100, b.value * 10) + '%'; }));
+      return h('div', { class: 'stat-row cmp' + (b.value > 10.5 ? ' over' : '') },
+        h('span', { class: 'sl' }, b.icon + ' ' + b.label),
+        h('div', { class: 'sbar' }, h('i', { class: 'old', style: 'width:' + Math.min(100, o.value * 10) + '%' }), bar),
+        h('span', { class: 'st' }, o.text && o.text !== b.text ? h('s', { class: 'muted' }, T(o.text)) : null, o.text && o.text !== b.text ? ' → ' : '', T(b.text),
+          d ? h('em', { class: d > 0 ? 'up' : 'down' }, ' ' + (d > 0 ? '+' : '') + d) : null));
+    });
+    const title = kind === 'ammo' ? X.say('ammo') : X.say(kind, { name: it.name });
+    modal(h('div', { class: 'compare' },
+      h('div', { class: 'modal-head' }, h('div', null, h('h2', { class: 'glowup' }, kind === 'modded' ? '☢ GLOW-UP' : kind === 'op' ? '🔥 GLOW-UP' : '∞ GLOW-UP'), h('div', null, title)),
+        h('button', { class: 'btn ghost x', onclick: () => { closeModal(); render(); } }, '✕')),
+      h('div', { class: 'stats' }, rows.length ? h('div', { class: 'stat-bars' }, rows) : h('p', { class: 'muted' }, 'No stat bars for this item type, but trust me, it\'s better now.')),
+      h('div', { class: 'row', style: 'margin-top:14px' },
+        h('button', { class: 'btn primary big', onclick: () => { closeModal(); render(); } }, 'LET\'S GOOO'),
+        h('button', { class: 'btn', onclick: () => shareItem(it) }, '🖼 Share card'),
+        h('button', { class: 'btn', onclick: () => toVault(it) }, '⭐ Vault it'),
+        h('span', { class: 'spacer' }),
+        h('label', { class: 'check muted', style: 'font-size:12px' }, h('input', { type: 'checkbox', onchange: e => X.set('compare', !e.target.checked) }), 'don\'t show this again'))));
+  }
+  function toVault(it) {
+    S.ed.commitItems();
+    if (X.vault.add(it)) { X.sfx('coin'); toast(X.say('vault', { name: it.name }), 'ok'); render(); }
+    else toast('Already in your vault, hoarder.');
+  }
+  async function shareItem(it) {
+    try {
+      S.ed && S.ed.commitItems && S.ed.commitItems();
+      const blob = await X.shareCard(it, BL3.stats.estimate(it));
+      const name = it.name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') + '.png';
+      const file = new File([blob], name, { type: 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: it.name, text: it.code() }).catch(() => {});
+      } else {
+        download(new Uint8Array(await blob.arrayBuffer()), name);
+        toast('🖼 Share card saved. Go flex on Discord.', 'ok');
+      }
+      X.sfx('coin');
+    } catch (e) { toast(X.say('err', { msg: e.message }), 'err'); }
+  }
+
   function openStats(it) {
     modal(h('div', null,
       h('div', { class: 'modal-head' }, h('div', null, h('h2', { style: 'color:var(--r' + it.rarity + ')' }, KIND_ICON[it.kind] + ' ' + it.name), h('div', { class: 'muted' }, 'Level ' + it.level + (it.mayhem ? ' · Mayhem ' + it.mayhem : '') + ' · ' + it.parts.length + ' parts')),
@@ -389,7 +468,11 @@
         const c = it.parts.filter(x => x === p).length;
         return h('div', { class: 'part col' }, h('div', { class: 'row' }, h('span', { class: 'slot' }, F.partInfo(p).slot), h('b', null, n), c > 1 ? h('span', { class: 'x2' }, '×' + c) : null),
           h('div', { class: 'pd' }, BL3.stats.describePart(p, it.kind)));
-      }))));
+      })),
+      h('div', { class: 'row', style: 'margin-top:12px' },
+        h('button', { class: 'btn', onclick: () => shareItem(it) }, '🖼 Share card'),
+        h('button', { class: 'btn', onclick: () => toVault(it) }, '⭐ Vault it'),
+        h('button', { class: 'btn', onclick: () => copy(it.code(), X.say('copied')) }, '📋 Copy code'))));
   }
 
   // ------------------------------------------------------------------ item editor
@@ -447,9 +530,9 @@
           h('div', null, h('h2', { style: 'color:var(--r' + it.rarity + ')' }, KIND_ICON[it.kind] + ' ' + it.name), h('div', { class: 'muted', style: 'font-size:12px;word-break:break-all' }, short(it.balance) + ' · ' + short(it.manufacturer) + ' · ' + short(it.invdata))),
           h('button', { class: 'btn primary x', onclick: () => { closeModal(); render(); } }, '✓ Done')),
         h('div', { class: 'row', style: 'margin-bottom:14px' },
-          h('button', { class: 'btn op', onclick: () => { F.makeOP(it, ctx()); rerender(); toast('🔥 OP', 'ok'); } }, '🔥 OP'),
-          h('button', { class: 'btn mod', onclick: () => confirmModded(() => { F.makeModded(it, ctx()); rerender(); toast('☢ MODDED', 'ok'); }) }, '☢ MODDED'),
-          h('button', { class: 'btn inf', onclick: () => { F.makeAmmoKit(it, ctx()); rerender(); toast('∞ ammo kit', 'ok'); } }, '∞ Ammo kit'),
+          h('button', { class: 'btn op', onclick: () => { F.makeOP(it, ctx()); rerender(); X.boom('op'); toast(X.say('op', { name: it.name }), 'ok'); } }, '🔥 OP'),
+          h('button', { class: 'btn mod', onclick: () => confirmModded(() => { F.makeModded(it, ctx()); rerender(); X.boom('modded'); toast(X.say('modded', { name: it.name }), 'ok'); }) }, '☢ MODDED'),
+          h('button', { class: 'btn inf', onclick: () => { F.makeAmmoKit(it, ctx()); rerender(); X.boom('op'); toast(X.say('ammo'), 'ok'); } }, '∞ Ammo kit'),
           powerSlider()),
         h('details', { class: 'stat-details', open: true }, h('summary', null, '📊 Stats (live)'), statsPanel(it, { maxTraits: 8 })),
         h('div', { class: 'grid g4', style: 'margin-bottom:14px' },
@@ -469,10 +552,12 @@
         h('h3', { style: 'font:900 18px var(--display);margin:14px 0 6px' }, 'Item code'),
         code,
         h('div', { class: 'row', style: 'margin-top:8px' },
-          h('button', { class: 'btn', onclick: () => copy(it.code(), 'Code copied') }, '📋 Copy code'),
-          h('button', { class: 'btn', onclick: () => { ed.duplicateItem(i); toast('Duplicated', 'ok'); render(); } }, '⧉ Duplicate'),
+          h('button', { class: 'btn', onclick: () => copy(it.code(), X.say('copied')) }, '📋 Copy code'),
+          h('button', { class: 'btn', onclick: () => { ed.duplicateItem(i); X.boom('kit'); toast(X.say('dup', { name: it.name }), 'ok'); render(); } }, '⧉ Duplicate'),
+          h('button', { class: 'btn', onclick: () => toVault(it) }, '⭐ Vault'),
+          h('button', { class: 'btn', onclick: () => shareItem(it) }, '🖼 Share'),
           h('span', { class: 'spacer' }),
-          h('button', { class: 'btn danger', onclick: () => { ed.removeItem(i); closeModal(); render(); toast('Deleted'); } }, '🗑 Delete')));
+          h('button', { class: 'btn danger', onclick: () => { ed.removeItem(i); closeModal(); render(); X.boom('delete'); toast(X.say('del', { name: it.name })); } }, '🗑 Delete')));
       modal(card);
     }
   }
@@ -542,7 +627,7 @@
         if (fs.mode === 'modded') F.makeModded(it, ctx());
         S.ed.addItem(it, { favorite: true });
       }
-    }, () => '🔨 Forged ' + fs.count + '× ' + (fs.mode === 'normal' ? '' : fs.mode.toUpperCase() + ' ') + sel.n + ' → ' + (isProfile() ? 'Bank' : 'Backpack'));
+    }, () => X.say('forged', { what: fs.count + '× ' + (fs.mode === 'normal' ? '' : fs.mode.toUpperCase() + ' ') + sel.n }) + ' → ' + (isProfile() ? 'Bank' : 'Backpack'), fs.mode === 'modded' ? 'modded' : fs.mode === 'op' ? 'op' : 'kit');
     if (fs.mode === 'modded') confirmModded(go); else go();
   }
 
@@ -600,6 +685,55 @@
         h('button', { class: 'btn primary', onclick: () => act(() => ed.unlockCosmetics(), 'All cosmetics unlocked') }, 'Unlock everything'))));
   }
 
+  // ------------------------------------------------------------------ vault
+  function viewVault(v) {
+    const list = X.vault.list();
+    v.append(h('div', { class: 'toolbar' },
+      h('b', { style: 'font:900 20px var(--display);letter-spacing:1px' }, '⭐ YOUR VAULT'),
+      h('span', { class: 'muted', style: 'font-size:13px' }, list.length + ' saved · lives in this browser, works across all your saves'),
+      h('span', { class: 'spacer' }),
+      list.length ? h('button', { class: 'btn sm', onclick: () => copy(list.map(x => '# ' + x.name + '\n' + x.code).join('\n\n'), 'All vault codes copied') }, '📋 Copy all') : null,
+      list.length ? h('button', { class: 'btn danger sm', onclick: () => { if (confirm(T('Empty the whole vault? No take-backs, bro.'))) { X.vault.clear(); X.boom('delete'); render(); } } }, '🗑 Empty vault') : null));
+    if (!list.length) {
+      v.append(h('div', { class: 'empty' }, h('div', { style: 'font-size:44px' }, '⭐'), h('p', null, 'Nothing here yet. Hit ⭐ on any item to stash it here and drop it into any character later.')));
+      return;
+    }
+    v.append(h('div', { class: 'items' }, list.map(x => {
+      let it = null;
+      try { it = BL3.Item.fromCode(x.code); } catch (e) { /* bad code */ }
+      const est = it && BL3.stats.estimate(it);
+      return h('div', { class: 'item r' + (x.rarity || 5) },
+        h('div', { class: 'name' }, (KIND_ICON[x.kind] || '📦') + ' ' + x.name),
+        h('div', { class: 'meta' }, h('span', { class: 'badge lvl' }, 'LVL ' + x.level), x.mayhem ? h('span', { class: 'badge mh' }, 'M' + x.mayhem) : null, h('span', null, x.parts + ' parts · saved ' + new Date(x.added).toLocaleDateString())),
+        est && est.vibe.length ? h('div', { class: 'vibe' }, T(est.vibe.join('  ·  '))) : null,
+        h('div', { class: 'actions' },
+          h('button', { class: 'btn primary sm', disabled: !it, onclick: () => act(() => S.ed.addItem(BL3.Item.fromCode(x.code), { favorite: true }), '➕ ' + x.name + ' dropped into your ' + (isProfile() ? 'bank' : 'backpack'), 'kit') }, '➕ Add to ' + (isProfile() ? 'bank' : 'backpack')),
+          it ? h('button', { class: 'btn sm', onclick: () => openStats(it) }, '📊') : null,
+          it ? h('button', { class: 'btn sm', onclick: () => shareItem(it) }, '🖼') : null,
+          h('button', { class: 'btn sm', onclick: () => copy(x.code, X.say('copied')) }, '📋'),
+          h('button', { class: 'btn danger sm', onclick: () => { X.vault.remove(x.id); X.sfx('delete'); render(); } }, '🗑')));
+    })));
+  }
+
+  // ------------------------------------------------------------------ settings
+  function openSettings() {
+    const st = X.settings;
+    const tog = (k, label, sub) => h('label', { class: 'check setting' }, h('input', { type: 'checkbox', checked: st[k], onchange: e => { X.set(k, e.target.checked); if (k === 'sound' && e.target.checked) X.sfx('coin'); if (S.ed) render(); } }), h('span', null, h('b', null, label), h('br'), h('small', { class: 'muted' }, sub)));
+    modal(h('div', null,
+      h('div', { class: 'modal-head' }, h('h2', null, '⚙ Settings'), h('button', { class: 'btn ghost x', onclick: () => { closeModal(); if (S.ed) render(); } }, '✕')),
+      h('h3', { style: 'font:900 18px var(--display);margin:4px 0 8px' }, '🎨 Theme'),
+      h('div', { class: 'themes' }, X.THEMES.map(t => h('button', { class: 'theme' + (st.theme === t.id ? ' on' : ''), style: '--a:' + t.a + ';--b:' + t.b, onclick: () => { X.set('theme', t.id); X.sfx('click'); openSettings(); } }, h('i'), t.name))),
+      h('h3', { style: 'font:900 18px var(--display);margin:16px 0 8px' }, '🔊 Vibes'),
+      h('div', { class: 'grid g2' },
+        tog('sound', 'Sound effects', 'ka-chunk, zaps & booms'),
+        tog('shake', 'Screen shake', 'when stuff gets broken'),
+        tog('compare', 'Glow-up popup', 'before/after stats on OP / MODDED'),
+        tog('clean', 'Family-friendly mode', 'no bad words (for streams / little bros)')),
+      h('div', { class: 'row', style: 'margin-top:16px' },
+        h('button', { class: 'btn', onclick: () => X.boom('god') }, '🔊 Test the boom'),
+        h('button', { class: 'btn ghost', onclick: () => { localStorage.removeItem('vf_mod_ok'); toast('Modded warning will show again'); } }, 'Reset warnings'))));
+  }
+
   // ------------------------------------------------------------------ modal
   function modal(content) {
     const card = $('#modalCard');
@@ -613,6 +747,7 @@
 
   // ------------------------------------------------------------------ wiring
   $('#btnOpen').onclick = pickFile;
+  $('#btnSettings').onclick = openSettings;
   $('#btnOpen2').onclick = pickFile;
   $('#btnSave').onclick = saveFile;
   $('#btnUndo').onclick = undo;

@@ -45,6 +45,26 @@ That one file contains the whole editor.
 | **∞ INFINITE AMMO** | Max ammo SDUs and full ammo. Every gun also gets no-ammo / ammo-regen anointments, stacked magazines, and Infiniti parts where they fit. |
 | **∞ INFINITE GRENADES** | Max grenade SDU and full grenades. Grenades get the grenade-regen anointment, and class mods get stacked grenade capacity. |
 
+### 🎁 Loadout kits (one tap = whole loadout)
+Eight themed 8-piece kits: 4 guns, shield, grenade, a class mod for YOUR character, and a relic. On a character save they get auto-equipped. Pick 🔥 OP or ☢ MODDED:
+🔥 Fire Demon · ⚡ Shock Therapy · ❄ Ice Ice Baby · ☢ Chernobyl · 💀 Boss Deleter · ∞ Never Reload (infinite ammo kit on everything) · 🚀 Explosion Addict · 🎲 Chaos Roulette (random legendaries, random elements, pray).
+The Lazy Box understands them too: `kit fire`, `boss deleter`, `op never reload`.
+
+### 🔥 Glow-up popup
+When you hit OP or MODDED on an item, its stat bars animate from old to new, with the change shown (`does the job → hits hard asf +3.8`).
+
+### ⭐ Vault
+Hit ⭐ on any item to stash it. The Vault lives in your browser, so you can drop stashed items into ANY character or profile later.
+
+### 🖼 Share cards
+Turns any item into an image with its stats, perks and BL3 code, ready for Discord or Reddit. On a phone it opens the share menu.
+
+### ⚙ Settings
+* Themes: Vault Yellow, Siren Purple, Moze Red, Zane Ice, FL4K Toxic, Blacked Out
+* Sound effects (ka-chunk, zaps, booms) and screen shake, each can be switched off
+* Glow-up popup on/off
+* **Family-friendly mode** cleans up the bad words, for streams or your little bro
+
 ### Per item (Backpack / Bank)
 Every item card has **🔥 OP**, **☢ MODDED**, **∞ ammo kit**, **✎ Edit**, **⧉ duplicate**, **📋 copy code** and **🗑 delete**.
 The toolbar has the same actions for **all items** (or only the items your filter shows: guns, shields, grenades, relics or class mods).
@@ -106,6 +126,8 @@ BL3(A/keqg/yMeLAidiwT5/bWQwqG3OuxeEhDH4LZAPWg1a2HG2imaCQ)    ← paste any amoun
 ```
 js/core.js      protobuf codec, GVAS container, PC + PS4 save/profile crypto, item serial codec
 js/editor.js    character + profile editing logic
+js/presets.js   loadout kits
+js/fx.js        sounds, shake, themes, funny lines, vault, share cards
 js/forge.js     item builder, OP / MODDED / ammo kits, GOD mode, lazy-text command parser
 js/app.js       UI
 js/data.js      generated game data (tools/build_data.py)

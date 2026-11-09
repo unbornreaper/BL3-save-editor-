@@ -527,6 +527,7 @@
     '3x op legendary shock jakobs shotgun',
     'modded relic  /  op shield  /  modded grenade  /  modded com',
     'random legendary  /  5x random modded weapon',
+    'kit fire  /  boss deleter  /  never reload  /  chaos roulette',
     'BL3(....)   ← paste item codes (any amount)',
   ];
 
@@ -555,6 +556,12 @@
       if (/^tvhm|true vault hunter/.test(line)) { out.push({ type: 'tvhm' }); continue; }
       if (/^unlock (all )?cosmetics|^cosmetics/.test(line)) { out.push({ type: 'cosmetics' }); continue; }
       if (/^help$|^\?$/.test(line)) { out.push({ type: 'help' }); continue; }
+      if (BL3.presets) {
+        const pm = /^(?:kit|loadout|preset|build)s? (.+)$/.exec(line);
+        const key = (pm ? pm[1] : line).replace(/^(op|modded) /, '').replace(/ (kit|loadout)$/, '');
+        const pr = BL3.presets.list.find(x => x.id === key || norm(x.name) === key || (pm && norm(x.name).includes(key)));
+        if (pr) { out.push({ type: 'preset', id: pr.id, mode: /\bop\b/.test(line) ? 'op' : 'modded' }); continue; }
+      }
       out.push(parseItemRequest(line));
     }
     return out;
@@ -607,6 +614,7 @@
     for (const c of cmds) {
       try {
         switch (c.type) {
+          case 'preset': { const r = BL3.presets.run(ed, c.id, { mode: c.mode, power: ctx.power }); log.push(r.preset.icon + ' ' + r.preset.name + ' kit: ' + r.log.join(', ') + (isProfile ? '' : ' (all equipped)')); break; }
           case 'help': log.push('Try: ' + HELP.join('  •  ')); break;
           case 'god': godMode(ed).forEach(l => log.push('⚡ ' + l)); break;
           case 'infammo': if (needSave('infinite ammo')) infiniteAmmo(ed).forEach(l => log.push('∞ ' + l)); break;

@@ -206,6 +206,12 @@
       }
       if (rep) obj[name].push(val); else obj[name] = val;
     }
+    // proto3: absent scalar fields mean their default value
+    for (const num in fields) {
+      const [name, type, rep] = fields[num];
+      if (rep || obj[name] !== undefined || schema[type]) continue;
+      obj[name] = type === 'string' ? '' : type === 'bytes' ? new Uint8Array(0) : type === 'bool' ? false : 0;
+    }
     return obj;
   }
 

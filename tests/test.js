@@ -173,6 +173,27 @@ t('Every catalog item gets stats; modded beats normal', () => {
   assert.strictEqual(BL3.stats.estimate(n).bars.find(b => b.key === 'stab').text, 'no recoil');
 });
 
+console.log('Presets');
+t('Every preset builds a full equipped kit that saves & reloads', () => {
+  for (const p of BL3.presets.list) {
+    for (const mode of ['op', 'modded']) {
+      const ed = BL3.open(pcBytes);
+      const r = BL3.presets.run(ed, p.id, { mode });
+      assert.strictEqual(r.added.length, 8, p.id + ' ' + r.log.join(','));
+      assert.ok(!r.log.some(l => l.startsWith('❓')), p.id + ': ' + r.log.join(','));
+      const ed2 = BL3.open(ed.toBytes());
+      const eq = ed2.slots.filter(s => s.index >= 0);
+      assert.strictEqual(eq.length, 8, p.id);
+      assert.ok(ed2.items.every(e => e.item && e.item.canParseParts && e.item.level === 72));
+    }
+  }
+});
+t('Lazy box understands kits', () => {
+  const ed = BL3.open(pcBytes);
+  const log = BL3.forge.runCommands(ed, 'kit fire\nboss deleter\nop never reload');
+  assert.strictEqual(ed.items.length, 24, log.join('\n'));
+});
+
 console.log('Profile');
 t('Synthetic PS4 profile: bank, keys, god mode, round-trip', () => {
   const g = BL3.file.readGvas(pcBytes);
