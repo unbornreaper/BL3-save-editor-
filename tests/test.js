@@ -61,6 +61,46 @@ t('Extra bytes before GVAS are tolerated and kept', () => {
   assert.ok(BL3.util.bytesEqual(BL3.file.save(f), buf));
 });
 
+t('Save Wizard JSON: loads, round-trips byte-identical, edits survive', () => {
+  // build a Save Wizard style JSON export from the sample save
+  const json = BL3.pbjson.fromPb(sample.data, 'Character') + '\n';
+  const buf = new TextEncoder().encode(json);
+  const f = BL3.file.load(buf);
+  assert.strictEqual(f.format, 'json');
+  assert.strictEqual(f.kind, 'save');
+  assert.ok(BL3.util.bytesEqual(BL3.file.save(f), buf));
+  // JSON -> binary must equal the original binary payload
+  assert.ok(BL3.util.bytesEqual(BL3.pb.encode(f.data, 'Character'), sample.plain));
+  const ed = new BL3.SaveEditor(f);
+  BL3.forge.godMode(ed, {});
+  BL3.presets.run(ed, 'boss', { mode: 'modded' });
+  const out = ed.toBytes();
+  JSON.parse(new TextDecoder().decode(out));
+  const ed2 = BL3.open(out);
+  assert.strictEqual(ed2.file.format, 'json');
+  assert.strictEqual(ed2.level, 72);
+  assert.strictEqual(ed2.items.length, 8);
+  assert.ok(ed2.items.every(e => e.item && e.item.canParseParts));
+});
+t('JSON float / int64 formatting matches protobuf C++ printer', () => {
+  const g = BL3.pbjson.jsonFloat;
+  assert.strictEqual(g(3), '3');
+  assert.strictEqual(g(Math.fround(0.26666668)), '0.266666681');
+  assert.strictEqual(g(Math.fround(0.47397849)), '0.47397849');
+  assert.strictEqual(g(1980), '1980');
+  assert.strictEqual(g(1000000), '1e+06');
+  assert.strictEqual(g(Math.fround(0.5)), '0.5');
+  const j = BL3.pbjson.fromPb({ last_save_timestamp: 639298102188920000n }, 'Character');
+  assert.ok(j.includes('"last_save_timestamp": "639298102188920000"'));
+});
+t('Profile JSON is detected', () => {
+  const prof = BL3.pb.create('Profile', { bank_inventory_list: [BL3.Item.fromCode(CODES.crader).serialize()] });
+  const buf = new TextEncoder().encode(BL3.pbjson.fromPb(prof, 'Profile') + '\n');
+  const ed = BL3.open(buf);
+  assert.ok(ed instanceof BL3.ProfileEditor);
+  assert.strictEqual(ed.bank[0].item.name, "Crader's EM-P5");
+});
+
 console.log('Item serials');
 t('Known codes decode', () => {
   const a = BL3.Item.fromCode(CODES.crader);

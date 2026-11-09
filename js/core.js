@@ -324,6 +324,142 @@
   BL3.pb = { decode: (buf, type, stats) => pbDecode(buf, type, 0, buf.length, stats), encode: pbEncode, create: pbNew };
 
   // ======================================================================
+  // Protobuf JSON (the format Save Wizard exports BL3 saves in)
+  // Mirrors protobuf's C++ JSON printer: field-number order, 1-space indent,
+  // default values printed, int64 as strings, bytes as base64, maps as objects.
+  // ======================================================================
+  const ENUMS = {
+    'MissionStatusPlayerSaveGameData.status': ['MS_NotStarted', 'MS_Active', 'MS_Complete', 'MS_Failed', 'MS_Unknown'],
+  };
+  function isMapEntry(type) {
+    const f = D().schema[type];
+    return /Entry$/.test(type) && f && f[1] && f[1][0] === 'key' && f[2] && f[2][0] === 'value' && Object.keys(f).length === 2;
+  }
+  function jsonScalarIn(v, type, enumNames) {
+    if (v === null) return undefined;
+    switch (type) {
+      case 'string': return String(v);
+      case 'bytes': return b64decode(String(v));
+      case 'bool': return v === true || v === 'true';
+      case 'float': case 'double':
+        if (v === 'NaN') return NaN; if (v === 'Infinity') return Infinity; if (v === '-Infinity') return -Infinity;
+        return Number(v);
+      case 'enum':
+        if (typeof v === 'string' && enumNames) { const i = enumNames.indexOf(v); if (i >= 0) return i; }
+        return Number(v);
+      case 'int64': case 'uint64': case 'sint64': case 'fixed64': case 'sfixed64': {
+        const b = BigInt(v);
+        return (b <= 9007199254740991n && b >= -9007199254740991n) ? Number(b) : b;
+      }
+      default: return Number(v);
+    }
+  }
+  function jsonToPb(obj, typeName) {
+    const schema = D().schema;
+    const fields = schema[typeName];
+    const byName = {};
+    for (const num in fields) byName[fields[num][0]] = fields[num];
+    const out = {};
+    for (const num in fields) if (fields[num][2]) out[fields[num][0]] = [];
+    for (const key of Object.keys(obj)) {
+      const f = byName[key];
+      const v = obj[key];
+      if (!f) { (out.__jsonExtra = out.__jsonExtra || {})[key] = v; continue; }
+      const [name, type, rep] = f;
+      const enumNames = ENUMS[typeName + '.' + name];
+      if (rep && isMapEntry(type)) {
+        const kf = schema[type][1], vf = schema[type][2];
+        out[name] = Object.keys(v || {}).map(k => ({ key: jsonScalarIn(k.replace(/^#/, ''), kf[1]), value: schema[vf[1]] ? jsonToPb(v[k], vf[1]) : jsonScalarIn(v[k], vf[1]) }));
+      } else if (rep) {
+        out[name] = (v || []).map(x => schema[type] ? jsonToPb(x, type) : jsonScalarIn(x, type, enumNames));
+      } else if (schema[type]) {
+        if (v !== null && v !== undefined) out[name] = jsonToPb(v, type);
+      } else {
+        out[name] = jsonScalarIn(v, type, enumNames);
+      }
+    }
+    for (const num in fields) {
+      const [name, type, rep] = fields[num];
+      if (rep || out[name] !== undefined || schema[type]) continue;
+      out[name] = type === 'string' ? '' : type === 'bytes' ? new Uint8Array(0) : type === 'bool' ? false : 0;
+    }
+    return out;
+  }
+  // printf("%.Ng") the way C does it
+  function fmtG(x, p) {
+    if (x === 0) return Object.is(x, -0) ? '-0' : '0';
+    const e = x.toExponential(p - 1);
+    const exp = Number(e.slice(e.indexOf('e') + 1));
+    if (exp < -4 || exp >= p) {
+      let [m, ex] = e.split('e');
+      if (m.includes('.')) m = m.replace(/0+$/, '').replace(/\.$/, '');
+      const n = Number(ex);
+      return m + 'e' + (n < 0 ? '-' : '+') + String(Math.abs(n)).padStart(2, '0');
+    }
+    let f = x.toFixed(Math.max(0, p - 1 - exp));
+    if (f.includes('.')) f = f.replace(/0+$/, '').replace(/\.$/, '');
+    return f;
+  }
+  function jsonFloat(v, isDouble) {
+    if (Number.isNaN(v)) return '"NaN"';
+    if (v === Infinity) return '"Infinity"';
+    if (v === -Infinity) return '"-Infinity"';
+    if (isDouble) { const a = fmtG(v, 15); return Number(a) === v ? a : fmtG(v, 17); }
+    const f = Math.fround(v);
+    const a = fmtG(f, 6);
+    return Math.fround(Number(a)) === f ? a : fmtG(f, 9);
+  }
+  function jsonStr(s) {
+    return JSON.stringify(s).replace(/[\u007f-\uffff]/g, c => {
+      const code = c.charCodeAt(0);
+      // keep printable unicode as-is like the C++ printer, escape controls / separators
+      return (code >= 0x7f && code <= 0x9f) || code === 0x2028 || code === 0x2029 || (code >= 0xd800 && code <= 0xdfff && false) ? '\\u' + code.toString(16).padStart(4, '0') : c;
+    });
+  }
+  function jsonScalarOut(v, type, enumNames) {
+    switch (type) {
+      case 'string': return jsonStr(v || '');
+      case 'bytes': return '"' + b64encode(v || new Uint8Array(0)) + '"';
+      case 'bool': return v ? 'true' : 'false';
+      case 'float': return jsonFloat(Number(v || 0), false);
+      case 'double': return jsonFloat(Number(v || 0), true);
+      case 'enum': return enumNames && enumNames[v || 0] ? '"' + enumNames[v || 0] + '"' : String(v || 0);
+      case 'int64': case 'uint64': case 'sint64': case 'fixed64': case 'sfixed64': return '"' + String(v || 0) + '"';
+      default: return String(v || 0);
+    }
+  }
+  function pbToJson(obj, typeName, ind = '') {
+    const schema = D().schema;
+    const fields = schema[typeName];
+    const inner = ind + ' ';
+    const parts = [];
+    const nums = Object.keys(fields).map(Number).sort((a, b) => a - b);
+    for (const num of nums) {
+      const [name, type, rep] = fields[num];
+      const v = obj[name];
+      const enumNames = ENUMS[typeName + '.' + name];
+      let out;
+      if (rep && isMapEntry(type)) {
+        const vf = schema[type][2];
+        const list = v || [];
+        out = list.length ? '{\n' + list.map(e => inner + ' ' + jsonStr(String(e.key)) + ': ' + (schema[vf[1]] ? pbToJson(e.value, vf[1], inner + ' ') : jsonScalarOut(e.value, vf[1]))).join(',\n') + '\n' + inner + '}' : '{}';
+      } else if (rep) {
+        const list = v || [];
+        out = list.length ? '[\n' + list.map(x => inner + ' ' + (schema[type] ? pbToJson(x, type, inner + ' ') : jsonScalarOut(x, type, enumNames))).join(',\n') + '\n' + inner + ']' : '[]';
+      } else if (schema[type]) {
+        if (v === undefined || v === null) continue;
+        out = pbToJson(v, type, inner);
+      } else {
+        out = jsonScalarOut(v, type, enumNames);
+      }
+      parts.push(inner + jsonStr(name) + ': ' + out);
+    }
+    if (obj.__jsonExtra) for (const k in obj.__jsonExtra) parts.push(inner + jsonStr(k) + ': ' + JSON.stringify(obj.__jsonExtra[k]));
+    return parts.length ? '{\n' + parts.join(',\n') + '\n' + ind + '}' : '{}';
+  }
+  BL3.pbjson = { toPb: jsonToPb, fromPb: pbToJson, fmtG, jsonFloat };
+
+  // ======================================================================
   // Save / profile obfuscation
   // ======================================================================
   const KEYS = {
@@ -474,7 +610,30 @@
     for (let i = 0; i + 2 < buf.length; i++) if (buf[i] === 0xEF && buf[i + 1] === 0xBF && buf[i + 2] === 0xBD) { if (++n >= 3) return true; }
     return buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF;
   }
+  function looksLikeJson(buf) {
+    let i = 0;
+    if (buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF) i = 3;
+    while (i < buf.length && (buf[i] === 0x20 || buf[i] === 0x0A || buf[i] === 0x0D || buf[i] === 0x09)) i++;
+    return buf[i] === 0x7B; // '{'
+  }
+  /** Save Wizard exports BL3 saves as protobuf JSON text. */
+  function loadJson(buf) {
+    const bom = buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF;
+    let text = td.decode(bom ? buf.subarray(3) : buf);
+    const crlf = text.includes('\r\n');
+    let obj;
+    // number-like keys (protobuf maps) would get re-sorted by JSON.parse: tag them to keep their order
+    try { obj = JSON.parse(text.replace(/^(\s*)"(-?\d+)"(\s*):/gm, '$1"#$2"$3:')); } catch (e) { throw new Error('This JSON file is damaged and can\'t be read (' + e.message + ').'); }
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) throw new Error('This JSON file is not a BL3 save.');
+    let kind = null;
+    if ('player_class_data' in obj || 'experience_points' in obj || 'inventory_items' in obj) kind = 'save';
+    else if ('bank_inventory_list' in obj || 'profile_sdu_list' in obj || 'profile_stats_data' in obj) kind = 'profile';
+    if (!kind) throw new Error('This JSON file doesn\'t look like a Borderlands 3 save or profile.');
+    const data = jsonToPb(obj, kind === 'profile' ? 'Profile' : 'Character');
+    return { kind, platform: 'PS4', format: 'json', json: { bom, crlf, trailingNewline: /\n$/.test(text) }, header: null, data };
+  }
   function loadFile(buf, forcePlatform) {
+    if (looksLikeJson(buf)) return loadJson(buf);
     if (textEditorDamage(buf)) throw new Error('This file was saved by a text editor and is damaged.');
     const g = readGvas(buf);
     const sgType = typeof g.header.sgType === 'string' ? g.header.sgType : '';
@@ -531,8 +690,11 @@
     } else if (buf[0] === 0x00 && buf[1] === 0x50 && buf[2] === 0x53 && buf[3] === 0x46) {
       verdict = 'That\'s the PlayStation info file (param.sfo), not the actual save.';
       fix = ['In the decrypted folder, pick the file named just a number (like "1" or "2") or "profile".'];
-    } else if (buf[0] === 0x7B || buf[0] === 0x3C) {
-      verdict = 'This is a text file (JSON / HTML), not a save.';
+    } else if (looksLikeJson(buf)) {
+      verdict = 'This is a JSON text file, which is normal for Save Wizard, but this one ' + (error && /damaged/.test(error.message) ? 'is damaged / incomplete' : 'isn\'t a Borderlands 3 character save or profile') + '.';
+      fix = ['Export the BL3 save again from Save Wizard (pick the file named with a number like "2", or "profile").', 'Don\'t edit it in a text app first.'];
+    } else if (buf[0] === 0x3C) {
+      verdict = 'This is a web page (HTML), not a save.';
       fix = ['Pick the decrypted save from Save Wizard instead.'];
     } else if (gv < 0 && entropy > 7.5) {
       verdict = 'This file is still ENCRYPTED. It looks like random noise, so Save Wizard hasn\'t decrypted it yet.';
@@ -562,6 +724,12 @@
 
   function saveFile(file, platformOverride) {
     const typeName = file.kind === 'profile' ? 'Profile' : 'Character';
+    if (file.format === 'json') {
+      let text = pbToJson(file.data, typeName) + (file.json.trailingNewline ? '\n' : '');
+      if (file.json.crlf) text = text.replace(/\n/g, '\r\n');
+      const body = te.encode(text);
+      return file.json.bom ? concat([new Uint8Array([0xEF, 0xBB, 0xBF]), body]) : body;
+    }
     const plain = BL3.pb.encode(file.data, typeName);
     const enc = encryptPayload(plain, KEYS[file.kind][platformOverride || file.platform]);
     return writeGvas(file.header, enc, file.trailing, file.prefix);

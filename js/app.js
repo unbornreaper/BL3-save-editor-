@@ -97,7 +97,7 @@
       BL3.file.load(bytes, S.savePlatform);
       download(bytes, S.fileName);
       X.boom('save');
-      toast(X.say('saved', { file: S.fileName }) + ' (' + S.savePlatform + ' format)', 'ok');
+      toast(X.say('saved', { file: S.fileName }) + (S.ed.file.format === 'json' ? ' Same Save Wizard format, keep the name "' + S.fileName + '" and import it back.' : ' (' + S.savePlatform + ' format)'), 'ok');
     } catch (e) {
       console.error(e);
       toast(X.say('err', { msg: 'save failed — ' + e.message }), 'err');
@@ -164,13 +164,13 @@
     p.hidden = false;
     p.innerHTML = '';
     const ed = S.ed;
-    p.append(
-      h('span', { class: 'tag ' + (ed.file.platform === 'PS4' ? 'ps4' : '') }, ed.file.platform),
+    p.append(...[
+      h('span', { class: 'tag ' + (ed.file.platform === 'PS4' ? 'ps4' : '') }, ed.file.format === 'json' ? 'PS4 · Save Wizard' : ed.file.platform),
       isProfile() ? h('b', null, 'PROFILE') : h('span', null, h('b', null, ed.name || 'Unnamed'), ' · ', ed.className, ' · Lvl ', ed.level),
       h('span', { class: 'muted' }, S.fileName),
-      h('select', { title: 'Save format', onchange: (e) => { S.savePlatform = e.target.value; toast('Will save as ' + S.savePlatform + ' format'); } },
+      ed.file.format === 'json' ? null : h('select', { title: 'Save format', onchange: (e) => { S.savePlatform = e.target.value; toast('Will save as ' + S.savePlatform + ' format'); } },
         ['PS4', 'PC'].map(x => h('option', { value: x, selected: S.savePlatform === x }, 'Save as ' + x)))
-    );
+    ].filter(Boolean));
   }
 
   // ------------------------------------------------------------------ dashboard

@@ -23,11 +23,12 @@ That one file contains the whole editor.
 
 1. **PS5:** Settings → Saved Data and Game/App Settings → Saved Data (PS4) → **Copy to USB drive** → Borderlands 3.
 2. On your PC, open **Save Wizard** → pick the BL3 save → **Advanced Mode** → **Decrypt**, then export the files.
-   * Character saves are `1.sav`, `2.sav`, … (one per character).
-   * `profile.sav` holds the bank, golden keys, guardian rank and cosmetics.
+   * Character saves are named `1`, `2`, … (one per character). Inside they're **JSON text**, and that's normal. Vault Forge reads and writes Save Wizard's JSON directly. Don't rename them.
+   * `profile` holds the bank, golden keys, guardian rank and cosmetics.
+   * Never open & save the file in Notepad/TextEdit first, that can break it. If a file won't open, the **🩺 Save Doctor** tells you why.
 3. Open the decrypted `.sav` in Vault Forge. It detects PS4 vs PC on its own.
 4. Edit away, then press **💾 Save file**.
-5. In Save Wizard, **replace** the decrypted file with the one you just saved, then **encrypt / re-sign** it to your PSN profile.
+5. In Save Wizard, **replace** the decrypted file with the one you just saved (same name, e.g. `2`), then **encrypt / re-sign** it to your PSN profile.
 6. Copy the save back from the USB to the PS5. Load the game. 🔥
 
 ⚠ **Always keep a backup of your original save.**

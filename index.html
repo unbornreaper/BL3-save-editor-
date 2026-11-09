@@ -32,7 +32,7 @@
     <section class="drop" id="dropZone">
       <div class="drop-icon">⬇</div>
       <h1>Drop your save here</h1>
-      <p>Decrypted PS4 save from <b>Save Wizard</b> (works for PS5 playing the PS4 version), or a PC save. <br>Character saves (named <code>1</code>, <code>2</code>… with or without <code>.sav</code>) and <code>profile</code> both work. <b>Don't open & save it in Notepad</b>, that breaks it.</p>
+      <p>Decrypted PS4 save from <b>Save Wizard</b> (works for PS5 playing the PS4 version), or a PC save. <br>Save Wizard's JSON export works as-is. Character saves (named <code>1</code>, <code>2</code>…) and <code>profile</code> both work, and you don't need to rename anything. <b>Don't open & save it in Notepad</b>, that breaks it.</p>
       <div class="drop-buttons">
         <button class="btn primary big" id="btnOpen2">📂 Choose file</button>
         <button class="btn ghost big" id="btnDemo">🎮 Try the demo save</button>
@@ -44,10 +44,10 @@
       <h2>PS5 / PS4 in 6 steps</h2>
       <ol>
         <li><b>PS5:</b> Settings → Saved Data → <i>PS4 Games</i> → Copy to USB drive (pick Borderlands 3).</li>
-        <li>Plug the USB into your PC, open <b>Save Wizard</b> → select the BL3 save → <b>Advanced Mode</b> → <b>Decrypt</b> and export the <code>.sav</code> files.</li>
-        <li>Open the exported <code>.sav</code> here (character = <code>1.sav</code>/<code>2.sav</code>…, bank/golden keys = <code>profile.sav</code>).</li>
+        <li>Plug the USB into your PC, open <b>Save Wizard</b> → select the BL3 save → <b>Advanced Mode</b> → <b>Decrypt</b> and export. You'll get files named like <code>2</code> (it's JSON text inside, and that's fine).</li>
+        <li>Open the exported file here (character = <code>1.sav</code>/<code>2.sav</code>…, bank/golden keys = <code>profile.sav</code>).</li>
         <li>Go nuts: <b>GOD MODE</b>, <b>OP</b>, <b>MODDED</b>, or just type what you want in the Lazy Box.</li>
-        <li>Hit <b>💾 Save file</b> → import it back into Save Wizard (replace the decrypted file) → <b>Encrypt / Re-sign</b> to your profile.</li>
+        <li>Hit <b>💾 Save file</b> → keep the same name (like <code>2</code>) → import it back into Save Wizard (replace the decrypted file) → <b>Encrypt / Re-sign</b> to your profile.</li>
         <li>Copy the save back to the PS5 from the USB (Saved Data → PS4 → Copy to console). Done. 🔥</li>
       </ol>
       <p class="warn">⚠ Keep a backup of your original save. Modded gear is for offline / solo fun — don't ruin other people's games.</p>
