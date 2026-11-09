@@ -263,3 +263,28 @@ table.t input[type=number] { width: 90px; }
   #editor { padding: 12px 10px 80px; }
   .items { grid-template-columns: 1fr; }
 }
+
+/* ---------- stats ---------- */
+.vibe { font-size: 12px; color: #ffe27a; cursor: pointer; line-height: 1.5; }
+.vibe:hover { text-decoration: underline; }
+.stats { background: #0b0b0e; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.stat-bars { display: grid; gap: 7px; }
+.stat-row { display: grid; grid-template-columns: 140px 1fr 190px; gap: 10px; align-items: center; font-size: 13px; }
+.stat-row .sl { color: var(--muted); font-weight: 600; }
+.stat-row .st { font-weight: 800; color: var(--text); }
+.sbar { height: 10px; background: #000; border-radius: 9px; overflow: hidden; border: 1px solid #222; }
+.sbar i { display: block; height: 100%; background: linear-gradient(90deg, #ff9500, var(--yellow)); border-radius: 9px; }
+.stat-row.over .sbar i { background: linear-gradient(90deg, #7b2cff, #ff4df0); box-shadow: 0 0 12px #b05cff; animation: pulse 1.2s ease-in-out infinite; }
+.stat-row.over .st { color: #e2b8ff; }
+@keyframes pulse { 50% { filter: brightness(1.5); } }
+.traits { margin: 10px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.55; }
+.part .pd, .part.col .pd { display: block; color: #a9d9ff; font-size: 11.5px; white-space: normal; margin-top: 2px; }
+.part .pn { white-space: normal; }
+.part.col { display: block; }
+.stat-details { margin-bottom: 14px; }
+.stat-details summary { cursor: pointer; font: 900 18px var(--display); letter-spacing: .5px; margin-bottom: 8px; }
+@media (min-width: 0) { .forge-layout .stat-row { grid-template-columns: 1fr 1fr; } .forge-layout .stat-row .sbar { grid-column: 1 / -1; order: 3; } }
+@media (max-width: 640px) { .stat-row { grid-template-columns: 1fr 1fr; } .stat-row .sbar { grid-column: 1 / -1; order: 3; } }
+.grid > * { min-width: 0; }
+.part { flex-wrap: wrap; }
+.part .pn { min-width: 0; flex: 1 1 200px; }

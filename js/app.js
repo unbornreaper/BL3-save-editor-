@@ -308,11 +308,13 @@
         h('span', null, it.parts.length + ' parts'),
         it.canParseParts ? null : h('span', { class: 'badge' }, 'level-only edit')),
       anoints.length ? h('div', { class: 'anoint' }, '✦ ' + F.anointName(anoints[0]) + (anoints.length > 1 ? '  (+' + (anoints.length - 1) + ' more)' : '')) : null,
+      (() => { const est = BL3.stats.estimate(it); return est && est.vibe.length ? h('div', { class: 'vibe', onclick: () => openStats(it), title: 'Tap for full stats' }, est.vibe.join('  ·  ')) : null; })(),
       h('div', { class: 'actions' },
         h('button', { class: 'btn op sm', title: 'Level 72 + Mayhem 10 + best anointment', onclick: () => act(() => F.makeOP(it, ctx()), '🔥 ' + it.name + ' is OP') }, '🔥 OP'),
         h('button', { class: 'btn mod sm', title: 'Stupid overpowered', onclick: () => confirmModded(() => act(() => F.makeModded(it, ctx()), '☢ ' + it.name + ' is MODDED')) }, '☢ MODDED'),
         it.kind === 'weapon' || it.kind === 'grenade' ? h('button', { class: 'btn inf sm', title: 'Ammo regen kit', onclick: () => act(() => F.makeAmmoKit(it, ctx()), '∞ ammo kit on ' + it.name) }, '∞') : null,
         h('button', { class: 'btn sm', onclick: () => openItem(i) }, '✎ Edit'),
+        h('button', { class: 'btn sm', title: 'Stats & part info', onclick: () => openStats(it) }, '📊'),
         h('button', { class: 'btn sm', title: 'Duplicate', onclick: () => act(() => ed.duplicateItem(i), 'Duplicated ' + it.name) }, '⧉'),
         h('button', { class: 'btn sm', title: 'Copy BL3 code', onclick: () => copy(it.code(), 'Code copied') }, '📋'),
         h('button', { class: 'btn danger sm', title: 'Delete', onclick: () => act(() => ed.removeItem(i), 'Deleted ' + it.name) }, '🗑')));
@@ -364,6 +366,32 @@
         h('button', { class: 'btn', onclick: () => download(new TextEncoder().encode(text), 'bl3-codes.txt') }, '💾 Download .txt'))));
   }
 
+  // ------------------------------------------------------------------ stats
+  function statsPanel(it, opts = {}) {
+    const est = BL3.stats.estimate(it);
+    if (!est) return h('p', { class: 'muted' }, 'No stats for this item.');
+    return h('div', { class: 'stats' },
+      est.bars.length ? h('div', { class: 'stat-bars' }, est.bars.map(b => h('div', { class: 'stat-row' + (b.value > 10.5 ? ' over' : '') },
+        h('span', { class: 'sl' }, b.icon + ' ' + b.label),
+        h('div', { class: 'sbar' }, h('i', { style: 'width:' + Math.min(100, b.value * 10) + '%' })),
+        h('span', { class: 'st' }, b.text)))) : null,
+      est.traits.length ? h('ul', { class: 'traits' }, est.traits.slice(0, opts.maxTraits || 40).map(t => h('li', null, t))) : null,
+      h('div', { class: 'muted', style: 'font-size:11px;margin-top:6px' }, 'Estimated from the item\'s parts, rarity, level, Mayhem and anointments. These are ratings, not exact in-game numbers.'));
+  }
+  function openStats(it) {
+    modal(h('div', null,
+      h('div', { class: 'modal-head' }, h('div', null, h('h2', { style: 'color:var(--r' + it.rarity + ')' }, KIND_ICON[it.kind] + ' ' + it.name), h('div', { class: 'muted' }, 'Level ' + it.level + (it.mayhem ? ' · Mayhem ' + it.mayhem : '') + ' · ' + it.parts.length + ' parts')),
+        h('button', { class: 'btn ghost x', onclick: closeModal }, '✕')),
+      statsPanel(it),
+      h('h3', { style: 'font:900 18px var(--display);margin:16px 0 6px' }, 'What each part does'),
+      h('div', { class: 'parts' }, uniq(it.parts).map(p => {
+        const [n, s_] = partLabel(p);
+        const c = it.parts.filter(x => x === p).length;
+        return h('div', { class: 'part col' }, h('div', { class: 'row' }, h('span', { class: 'slot' }, F.partInfo(p).slot), h('b', null, n), c > 1 ? h('span', { class: 'x2' }, '×' + c) : null),
+          h('div', { class: 'pd' }, BL3.stats.describePart(p, it.kind)));
+      }))));
+  }
+
   // ------------------------------------------------------------------ item editor
   function partLabel(full) {
     const s = short(full);
@@ -391,13 +419,13 @@
         const slot = F.partInfo(p).slot;
         return h('div', { class: 'part' },
           h('span', { class: 'slot' }, slot),
-          h('span', { class: 'pn', title: s || n }, n, s ? h('small', null, s) : null),
+          h('span', { class: 'pn', title: s || n }, n, s ? h('small', null, s) : null, h('span', { class: 'pd' }, BL3.stats.describePart(p, it.kind))),
           counts[p] > 1 ? h('span', { class: 'x2' }, '×' + counts[p]) : null,
           h('button', { class: 'btn sm', title: 'Add another copy', onclick: () => { if (it.parts.length >= 63) return toast('Max 63 parts', 'err'); it.parts.push(p); it.touch(); rerender(); } }, '+'),
           h('button', { class: 'btn sm danger', title: 'Remove one', onclick: () => { it.parts.splice(it.parts.lastIndexOf(p), 1); it.touch(); rerender(); } }, '−'));
       }));
       const addPart = h('select', { style: 'flex:1;min-width:200px' }, h('option', { value: '' }, '+ Add a part (' + cat.length + ' available)…'),
-        cat.map(p => { const [n, s] = partLabel(p); return h('option', { value: p }, n + (s ? ' — ' + s : '')); }));
+        cat.map(p => { const [n, s] = partLabel(p); const d = BL3.stats.describePart(p, it.kind); return h('option', { value: p, title: d }, n + (s ? ' — ' + s : '') + '  ·  ' + d.slice(0, 70)); }));
       addPart.onchange = () => { if (!addPart.value) return; if (it.parts.length >= 63) return toast('Max 63 parts', 'err'); it.parts.push(addPart.value); it.touch(); rerender(); };
       const gens = h('div', { class: 'parts' }, it.generics.map((g, gi) => h('div', { class: 'part' },
         h('span', { class: 'slot', style: 'background:var(--cyan)' }, /Mayhem/i.test(g) ? 'mayhem' : 'anoint'),
@@ -423,6 +451,7 @@
           h('button', { class: 'btn mod', onclick: () => confirmModded(() => { F.makeModded(it, ctx()); rerender(); toast('☢ MODDED', 'ok'); }) }, '☢ MODDED'),
           h('button', { class: 'btn inf', onclick: () => { F.makeAmmoKit(it, ctx()); rerender(); toast('∞ ammo kit', 'ok'); } }, '∞ Ammo kit'),
           powerSlider()),
+        h('details', { class: 'stat-details', open: true }, h('summary', null, '📊 Stats (live)'), statsPanel(it, { maxTraits: 8 })),
         h('div', { class: 'grid g4', style: 'margin-bottom:14px' },
           h('label', { class: 'field' }, 'Level', h('input', { type: 'number', min: 1, max: 127, value: it.level, onchange: ev => { it.level = Math.max(1, Math.min(127, +ev.target.value || 1)); it.touch(); rerender(); } })),
           h('label', { class: 'field' }, 'Mayhem', h('select', { disabled: !F.canMayhem(it) || !it.canParseParts, onchange: ev => { F.setMayhem(it, +ev.target.value); rerender(); } },
@@ -490,6 +519,15 @@
           h('label', { class: 'field' }, 'How many', h('input', { type: 'number', min: 1, max: 50, value: fs.count, onchange: e => { fs.count = Math.max(1, Math.min(50, +e.target.value || 1)); } }))),
         fs.mode === 'modded' ? h('div', { style: 'margin-bottom:12px' }, powerSlider()) : null,
         h('button', { class: 'btn primary big', style: 'width:100%', disabled: !sel, onclick: forgeCreate }, '🔨 FORGE IT'),
+        sel ? (() => {
+          try {
+            const pv = F.buildItem(sel, { element: fs.element || null, level: fs.level });
+            if (fs.mode === 'op') F.makeOP(pv, Object.assign(ctx(), { level: fs.level }));
+            if (fs.mode === 'modded') F.makeModded(pv, ctx());
+            return h('div', { style: 'margin-top:14px' }, h('div', { class: 'muted', style: 'font-size:12px;margin-bottom:6px' }, 'PREVIEW STATS'), statsPanel(pv, { maxTraits: 6 }),
+              h('button', { class: 'btn sm', style: 'margin-top:6px', onclick: () => openStats(pv) }, '📊 What each part does'));
+          } catch (e) { return null; }
+        })() : null,
         h('p', { class: 'muted', style: 'font-size:12px' }, 'Built items get sensible parts automatically (the item\'s own legendary parts + a clean base). Tweak anything afterwards in ✎ Edit. If a forged item ever looks off in-game, importing a real code for it (📥) is the most reliable option.'),
         h('button', { class: 'btn', style: 'width:100%;margin-top:6px', onclick: () => { const r = F.searchCatalog('', { rarity: 5, kind: fs.kind || undefined }); const c = r[Math.floor(Math.random() * r.length)]; fs.sel = c.b; render(); } }, '🎲 Random legendary'))));
   }

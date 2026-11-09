@@ -150,6 +150,29 @@ t('Equip, duplicate and delete items keep slots consistent', () => {
   assert.strictEqual(ed.items[0].item.name, 'The Transformer');
 });
 
+console.log('Stats & part descriptions');
+t('Every part in the game gets a non-empty description', () => {
+  const bad = [];
+  for (const cat in BL3_DATA.serialdb) {
+    if (!/^BPInvPart_/.test(cat)) continue;
+    const kind = /Shield/.test(cat) ? 'shield' : /Grenade/.test(cat) ? 'grenade' : /Artifact/.test(cat) ? 'relic' : /ClassMod/.test(cat) ? 'com' : 'weapon';
+    for (const p of BL3_DATA.serialdb[cat].assets) { const d = BL3.stats.describePart(p, kind); if (!d || d.length < 5) bad.push(p); }
+  }
+  assert.deepStrictEqual(bad, []);
+});
+t('Every catalog item gets stats; modded beats normal', () => {
+  for (const c of BL3_DATA.catalog) {
+    const it = BL3.forge.buildItem(c, {});
+    const e = BL3.stats.estimate(it);
+    assert.ok(e && (e.bars.length || e.traits.length), c.n);
+  }
+  const n = BL3.Item.fromCode(CODES.crader), m = BL3.Item.fromCode(CODES.crader);
+  BL3.forge.makeModded(m, { power: 5 });
+  const dmg = (it) => BL3.stats.estimate(it).bars.find(b => b.key === 'dmg').value;
+  assert.ok(dmg(m) > dmg(n) + 5);
+  assert.strictEqual(BL3.stats.estimate(n).bars.find(b => b.key === 'stab').text, 'no recoil');
+});
+
 console.log('Profile');
 t('Synthetic PS4 profile: bank, keys, god mode, round-trip', () => {
   const g = BL3.file.readGvas(pcBytes);

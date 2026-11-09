@@ -56,6 +56,15 @@ The **✎ Edit** window lets you change:
 * equip slot, favorite / junk
 * live **BL3(...) code** you can copy and share
 
+### 📊 Stats & part info
+Every item shows a quick **vibe check** on its card ("⚡ shoots fast asf · 🧱 no recoil · 💥 hits hard"). Tap it, or the **📊** button, for the full breakdown:
+* stat bars for damage, fire rate, accuracy, recoil, mag size, reload and handling (shields get capacity / recharge, grenades get damage / blast radius)
+* plain-English labels from "shoots slow as hell" up to "shoots fast asf", and "kicks like a mule" down to "no recoil". Modded gear unlocks the ☢ tiers ("bullet hose from hell")
+* what the manufacturer does (Jakobs ricochet, Dahl burst, COV overheat…), the element and what it's good against, the legendary parts and the anointments
+* **what each part does**: barrel, grip, stock, mag, scope, underbarrel, shield perks, grenade behaviors, relic bonuses, class-mod skills…
+
+The stats also update live in the item editor and in the Forge preview. BL3 doesn't store stats in the save: the game works them out from the parts. So these are **estimates** from the parts, rarity, level, Mayhem and anointments, not exact in-game numbers.
+
 ### 🔨 The Forge: build any item from scratch
 Search 780+ items (every legendary gun, shield, grenade, relic and class mod, plus the generic rarities). Filter by type, brand and rarity. Pick **Normal / OP / MODDED**, an element (fire / shock / corrosive / cryo / radiation), a level and how many you want, then hit **FORGE IT**.
 

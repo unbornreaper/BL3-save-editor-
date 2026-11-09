@@ -505,6 +505,7 @@
       if (q && n === q) score += 100;
       else if (q && n.startsWith(q)) score += 60;
       else if (q && n.includes(q)) score += 40;
+      else if (q && n.replace(/ /g, '').includes(q.replace(/ /g, ''))) score += 35;
       for (const w of words) if (w.length > 1 && n.split(' ').includes(w)) score += 10; else if (w.length > 2 && n.includes(w)) score += 4;
       if (!q) score = 1;
       if (score > 0) scored.push({ c, score: score + c.r });
