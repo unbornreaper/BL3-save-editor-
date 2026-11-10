@@ -64,7 +64,7 @@
     openFail: ['That\'s not a BL3 save, chief. {msg}', 'Can\'t read that one. {msg}'],
     copied: ['Code copied. Go flex on Discord.', 'Copied. Spread the chaos.'],
     kit: ['{icon} {name} kit equipped. Go wild.', '{icon} {name} loadout locked and loaded.'],
-    vault: ['Stashed {name} in your vault.', '{name} saved to the vault for later shenanigans.'],
+    vault: ['⭐ {name} added to your favorites.', '⭐ {name} saved to favorites for later shenanigans.'],
     forged: ['🔨 Forged {what}. Hot off the anvil.', '🔨 {what} coming right up.'],
     imported: ['Imported {n} items. Free loot, baby.'],
   };

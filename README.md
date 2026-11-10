@@ -51,8 +51,8 @@ That one file contains the whole editor.
 Can't decide what to mod? Whack the piñata and get random legendaries that are already OP or MODDED.
 * **What:** anything, or just guns / shields / grenades / relics / class mods (class mods match your character)
 * **Power:** 🔥 OP, ☢ MODDED, or 🎰 Mix (random, with random modded strength)
-* **Send to:** your backpack / bank, or your ⭐ Vault
-* **How many:** 1, 5, 10, 25, or 💥 **FILL IT UP** (backpack up to 40 items, bank up to 100, vault +25)
+* **Send to:** your backpack, your in-game 🏦 bank, or ⭐ Favorites
+* **How many:** 1, 5, 10, 25, or 💥 **FILL IT UP** (backpack up to 40 items, bank up to 100, favorites +25)
 
 The loot pops in one by one. Don't like it? Hit **🎲 Reroll** and that batch gets swapped for a new one.
 The Lazy Box takes it too: `loot 10`, `pinata 25 modded`, `surprise me`.
@@ -65,8 +65,16 @@ The Lazy Box understands them too: `kit fire`, `boss deleter`, `op never reload`
 ### 🔥 Glow-up popup
 When you hit OP or MODDED on an item, its stat bars animate from old to new, with the change shown (`does the job → hits hard asf +3.8`).
 
-### ⭐ Vault
-Hit ⭐ on any item to stash it. The Vault lives in your browser, so you can drop stashed items into ANY character or profile later.
+### 🏦 In-game bank
+BL3 keeps your bank in the **profile** file (Save Wizard names it `profile`). While a character is open, tap **🏦 Link bank** (or pick "Send to: Bank" in the piñata) and choose your `profile` file. Then you can:
+* send Loot Piñata drops straight into the bank
+* move any backpack item to the bank with the 🏦 button, and back with 🎒 To backpack
+* OP / MODDED everything in the bank from the 🏦 Bank tab
+
+**💾 Save file** then gives you BOTH files (`2` and `profile`). Put both back with Save Wizard.
+
+### ⭐ Favorites
+Hit ⭐ on any item to save it in your browser (not the game), then drop it into ANY character later.
 
 ### 🖼 Share cards
 Turns any item into an image with its stats, perks and BL3 code, ready for Discord or Reddit. On a phone it opens the share menu.

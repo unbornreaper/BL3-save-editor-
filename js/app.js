@@ -55,6 +55,7 @@
       S.fileName = name || 'save.sav';
       S.original = bytes;
       S.undo = [];
+      if (!isProfile()) { /* keep a linked profile when switching characters */ } else { S.prof = null; }
       S.savePlatform = S.ed.file.platform;
       S.saveAs = S.ed.file.format === 'json' ? 'sw' : (S.ed.file.platform === 'PC' ? 'pc' : 'ps4');
       S.tab = 'dash';
@@ -108,6 +109,15 @@
       const base = S.fileName.replace(/\.(sav|json|txt|html)$/i, '');
       const name = mode === 'sw' ? (S.ed.file.format === 'json' ? S.fileName : base) : mode === 'json' ? base + '.json' : base + '.sav';
       download(bytes, name);
+      if (S.prof && S.profDirty && !isProfile()) {
+        S.prof.commitItems();
+        const pf = S.prof.file;
+        const pbytes = BL3.file.save(pf, pf.platform, pf.format === 'json' ? 'json' : 'gvas');
+        BL3.file.load(pbytes);
+        setTimeout(() => download(pbytes, S.profName || 'profile'), 700);
+        S.profDirty = false;
+        setTimeout(() => toast('🏦 Also saved your bank file "' + (S.profName || 'profile') + '". Put BOTH back with Save Wizard.', 'ok'), 800);
+      }
       X.boom('save');
       toast(X.say('saved', { file: name }) + ' ' + SAVE_AS_HELP[mode], 'ok');
     } catch (e) {
@@ -118,17 +128,19 @@
   function snapshot() {
     try {
       S.ed.commitItems();
-      S.undo.push(BL3.pb.encode(S.ed.file.data, isProfile() ? 'Profile' : 'Character'));
+      if (S.prof) S.prof.commitItems();
+      S.undo.push({ main: BL3.pb.encode(S.ed.file.data, isProfile() ? 'Profile' : 'Character'), prof: S.prof ? BL3.pb.encode(S.prof.file.data, 'Profile') : null });
       if (S.undo.length > 25) S.undo.shift();
     } catch (e) { console.warn(e); }
     $('#btnUndo').disabled = !S.undo.length;
   }
   function undo() {
-    const plain = S.undo.pop();
-    if (!plain) return;
+    const snap = S.undo.pop();
+    if (!snap) return;
     const f = S.ed.file;
-    f.data = BL3.pb.decode(plain, isProfile() ? 'Profile' : 'Character');
+    f.data = BL3.pb.decode(snap.main, isProfile() ? 'Profile' : 'Character');
     S.ed = isProfile() ? new BL3.ProfileEditor(f) : new BL3.SaveEditor(f);
+    if (S.prof && snap.prof) { S.prof.file.data = BL3.pb.decode(snap.prof, 'Profile'); S.prof = new BL3.ProfileEditor(S.prof.file); }
     $('#btnUndo').disabled = !S.undo.length;
     render();
     X.sfx('click');
@@ -150,8 +162,8 @@
   }
 
   // ------------------------------------------------------------------ render root
-  const TABS_SAVE = [['dash', '⚡ Command Center'], ['inv', '🎒 Backpack'], ['forge', '🔨 Forge'], ['char', '👤 Character'], ['vault', '⭐ Vault']];
-  const TABS_PROF = [['dash', '⚡ Command Center'], ['inv', '🏦 Bank'], ['forge', '🔨 Forge'], ['char', '🗝 Profile'], ['vault', '⭐ Vault']];
+  const TABS_SAVE = [['dash', '⚡ Command Center'], ['inv', '🎒 Backpack'], ['forge', '🔨 Forge'], ['char', '👤 Character'], ['bank', '🏦 Bank'], ['vault', '⭐ Favorites']];
+  const TABS_PROF = [['dash', '⚡ Command Center'], ['inv', '🏦 Bank'], ['forge', '🔨 Forge'], ['char', '🗝 Profile'], ['vault', '⭐ Favorites']];
 
   function render() {
     if (!S.ed) return;
@@ -160,14 +172,14 @@
     tabs.innerHTML = '';
     for (const [id, label] of (isProfile() ? TABS_PROF : TABS_SAVE)) {
       const t = h('div', { class: 'tab' + (S.tab === id ? ' active' : ''), onclick: () => { S.tab = id; render(); } }, label,
-        id === 'inv' ? h('span', { class: 'count' }, S.ed.items.length) : id === 'vault' ? h('span', { class: 'count' }, X.vault.list().length) : null);
+        id === 'inv' ? h('span', { class: 'count' }, S.ed.items.length) : id === 'vault' ? h('span', { class: 'count' }, X.vault.list().length) : id === 'bank' ? h('span', { class: 'count' }, S.prof ? S.prof.bank.length : '+') : null);
       tabs.append(t);
     }
     document.querySelectorAll('.view').forEach(v => {
       const on = v.dataset.view === S.tab;
       v.classList.toggle('active', on);
       if (!on) v.innerHTML = '';
-      if (on) { v.innerHTML = ''; ({ dash: viewDash, inv: viewInv, forge: viewForge, char: viewChar, vault: viewVault })[S.tab](v); }
+      if (on) { v.innerHTML = ''; ({ dash: viewDash, inv: viewInv, forge: viewForge, char: viewChar, vault: viewVault, bank: viewBank })[S.tab](v); }
     });
   }
 
@@ -180,6 +192,8 @@
       h('span', { class: 'tag ' + (ed.file.platform === 'PS4' ? 'ps4' : '') }, ed.file.format === 'json' ? 'PS4 · Save Wizard' : ed.file.platform),
       isProfile() ? h('b', null, 'PROFILE') : h('span', null, h('b', null, ed.name || 'Unnamed'), ' · ', ed.className, ' · Lvl ', ed.level),
       h('span', { class: 'muted' }, S.fileName),
+      !isProfile() ? (S.prof ? h('span', { class: 'tag', title: 'Bank comes from ' + (S.profName || 'profile'), style: 'cursor:pointer', onclick: () => { S.tab = 'bank'; render(); } }, '🏦 Bank: ' + S.prof.bank.length + (S.profDirty ? ' •' : ''))
+        : h('button', { class: 'btn ghost sm', title: 'Open your profile file to edit the in-game bank', onclick: () => linkProfile() }, '🏦 Link bank')) : null,
       h('select', { title: 'Save format / convert', onchange: (e) => { S.saveAs = e.target.value; toast(SAVE_AS_HELP[S.saveAs]); } },
         (ed.file.format === 'json'
           ? [['sw', 'Save as: Save Wizard file (same name)'], ['json', 'Save as: .json'], ['ps4', 'Convert: PS4 .sav (other editors)'], ['pc', 'Convert: PC .sav']]
@@ -229,44 +243,117 @@
     v.append(kitPanel());
     v.append(lazyBox());
   }
+  // ------------------------------------------------------------------ in-game bank (lives in the profile file)
+  const bankEd = () => (isProfile() ? S.ed : S.prof);
+  function linkProfile(then) {
+    let inp = $('#profInput');
+    if (!inp) { inp = h('input', { type: 'file', id: 'profInput', hidden: true }); document.body.append(inp); }
+    inp.value = '';
+    inp.onchange = async () => {
+      const f = inp.files[0];
+      if (!f) return;
+      const bytes = new Uint8Array(await f.arrayBuffer());
+      try {
+        const ed = BL3.open(bytes);
+        if (!(ed instanceof BL3.ProfileEditor)) { toast('That\'s a character save. For the bank, pick the file named "profile" from Save Wizard.', 'err'); return; }
+        S.prof = ed; S.profName = f.name; S.profDirty = false;
+        X.sfx('coin');
+        toast('🏦 Bank linked: ' + ed.bank.length + ' items in your bank. Hit 💾 Save and you get both files back.', 'ok');
+        render();
+        if (then) then();
+      } catch (e) { saveDoctor(bytes, f.name, e); }
+    };
+    inp.click();
+  }
+  function ensureBank(go) {
+    if (bankEd()) return go();
+    modal(h('div', null,
+      h('div', { class: 'modal-head' }, h('h2', null, '🏦 Link your bank'), h('button', { class: 'btn ghost x', onclick: closeModal }, '✕')),
+      h('p', null, 'BL3 keeps your bank in a separate file: your ', h('b', null, 'profile'), '. In Save Wizard it\'s the file named ', h('code', null, 'profile'), ', right next to your character files (', h('code', null, '1'), ', ', h('code', null, '2'), '…).'),
+      h('p', { class: 'muted' }, 'Pick it once and everything can go straight into your bank. When you hit 💾 Save you get BOTH files back: put both into Save Wizard.'),
+      h('div', { class: 'row' }, h('button', { class: 'btn primary big', onclick: () => { closeModal(); linkProfile(go); } }, '📂 Pick my profile file'), h('button', { class: 'btn ghost big', onclick: closeModal }, 'Nah'))));
+  }
+  function moveToBank(i) {
+    ensureBank(() => {
+      const e = S.ed.items[i];
+      if (!e || !e.item) return;
+      act(() => { S.ed.commitItems(); bankEd().addItem(new BL3.Item(e.item.serialize())); S.ed.removeItem(i); S.profDirty = true; }, '🏦 Moved ' + e.item.name + ' to your bank', 'kit');
+    });
+  }
+  function viewBank(v) {
+    const b = S.prof;
+    if (!b) { v.append(h('div', { class: 'empty' }, h('div', { style: 'font-size:44px' }, '🏦'), h('p', null, 'Your bank lives in your profile file.'), h('button', { class: 'btn primary big', onclick: () => linkProfile() }, '📂 Link my profile'))); return; }
+    v.append(h('div', { class: 'toolbar' },
+      h('b', { style: 'font:900 20px var(--display);letter-spacing:1px' }, '🏦 YOUR BANK'),
+      h('span', { class: 'muted', style: 'font-size:13px' }, b.bank.length + ' items · from ' + (S.profName || 'profile') + (S.profDirty ? ' · unsaved changes' : '')),
+      h('span', { class: 'spacer' }),
+      h('button', { class: 'btn op sm', onclick: () => act(() => { const n = F.allItems(b, it => F.makeOP(it, ctx())); S.profDirty = true; return n; }, n => '🔥 ' + X.say('opAll', { n }), 'op') }, '🔥 OP ALL'),
+      h('button', { class: 'btn mod sm', onclick: () => confirmModded(() => act(() => { const n = F.allItems(b, it => F.makeModded(it, ctx())); S.profDirty = true; return n; }, n => X.say('moddedAll', { n }), 'modded')) }, '☢ MODDED ALL')));
+    if (!b.bank.length) { v.append(h('div', { class: 'empty' }, h('p', null, 'Bank\'s empty. Whack the 🎲 Loot Piñata with "Send to: Bank".'))); return; }
+    v.append(h('div', { class: 'items' }, b.bank.map((e, i) => {
+      if (!e.item) return h('div', { class: 'item' }, h('div', { class: 'name' }, 'Unreadable item'));
+      const it = e.item;
+      const est = BL3.stats.estimate(it);
+      return h('div', { class: 'item r' + it.rarity },
+        h('div', { class: 'name' }, KIND_ICON[it.kind] + ' ' + it.name),
+        h('div', { class: 'meta' }, h('span', { class: 'badge lvl' }, 'LVL ' + it.level), it.mayhem ? h('span', { class: 'badge mh' }, 'M' + it.mayhem) : null, h('span', null, it.parts.length + ' parts')),
+        est && est.vibe.length ? h('div', { class: 'vibe', onclick: () => openStats(it) }, T(est.vibe.join('  ·  '))) : null,
+        h('div', { class: 'actions' },
+          h('button', { class: 'btn op sm', onclick: () => act(() => { F.makeOP(it, ctx()); S.profDirty = true; }, X.say('op', { name: it.name }), 'op') }, '🔥 OP'),
+          h('button', { class: 'btn mod sm', onclick: () => confirmModded(() => act(() => { F.makeModded(it, ctx()); S.profDirty = true; }, X.say('modded', { name: it.name }), 'modded')) }, '☢ MODDED'),
+          h('button', { class: 'btn sm', title: 'Move to backpack', onclick: () => act(() => { b.commitItems(); S.ed.addItem(new BL3.Item(it.serialize())); b.removeItem(i); S.profDirty = true; }, '🎒 Moved ' + it.name + ' to your backpack', 'kit') }, '🎒 To backpack'),
+          h('button', { class: 'btn sm', onclick: () => openStats(it) }, '📊'),
+          h('button', { class: 'btn sm', onclick: () => copy(it.code(), X.say('copied')) }, '📋'),
+          h('button', { class: 'btn danger sm', onclick: () => act(() => { b.removeItem(i); S.profDirty = true; }, X.say('del', { name: it.name }), 'delete') }, '🗑')));
+    })));
+  }
+
   // ------------------------------------------------------------------ loot piñata
   function lootPanel() {
     const L = S.loot = S.loot || { kind: 'any', mode: 'mix', dest: 'file' };
     const seg = (key, opts) => h('div', { class: 'seg' }, opts.map(([v_, l]) => h('button', { class: L[key] === v_ ? 'on' : '', onclick: () => { L[key] = v_; X.sfx('click'); render(); } }, l)));
     const where = isProfile() ? 'bank' : 'backpack';
-    const have = L.dest === 'vault' ? X.vault.list().length : S.ed.items.length;
-    const fillTarget = L.dest === 'vault' ? BL3.presets.FILL_TO.vault + have : BL3.presets.FILL_TO[where];
-    const fillN = Math.max(0, fillTarget - (L.dest === 'vault' ? 0 : have)) || 0;
+    if (L.dest === 'vault') L.dest = 'fav';
+    if (L.dest === 'bank' && isProfile()) L.dest = 'file';
+    const bank = L.dest === 'bank' ? bankEd() : null;
+    let fillTarget, fillN;
+    if (L.dest === 'fav') { fillTarget = 25; fillN = 25; }
+    else if (L.dest === 'bank') { fillTarget = BL3.presets.FILL_TO.bank; fillN = bank ? Math.max(0, fillTarget - bank.items.length) : fillTarget; }
+    else { fillTarget = BL3.presets.FILL_TO[where]; fillN = Math.max(0, fillTarget - S.ed.items.length); }
     return h('div', { class: 'panel pinata', style: 'margin-bottom:16px' },
       h('h3', null, '🎲 Loot Piñata', h('small', null, 'random legendaries, already OP / MODDED. Just whack it.')),
       h('div', { class: 'loot-opts' },
         h('div', null, h('div', { class: 'lo-l' }, 'WHAT'), seg('kind', [['any', '🎲 Anything'], ['weapon', '🔫 Guns'], ['shield', '🛡 Shields'], ['grenade', '💣 Nades'], ['relic', '🔮 Relics'], ['com', '🎓 COMs']])),
         h('div', null, h('div', { class: 'lo-l' }, 'POWER'), seg('mode', [['op', '🔥 OP'], ['modded', '☢ MODDED'], ['mix', '🎰 Mix']])),
-        h('div', null, h('div', { class: 'lo-l' }, 'SEND TO'), seg('dest', [['file', isProfile() ? '🏦 Bank' : '🎒 Backpack'], ['vault', '⭐ Vault']]))),
+        h('div', null, h('div', { class: 'lo-l' }, 'SEND TO'), seg('dest', isProfile() ? [['file', '🏦 Bank'], ['fav', '⭐ Favorites']] : [['file', '🎒 Backpack'], ['bank', '🏦 Bank'], ['fav', '⭐ Favorites']]))),
       h('div', { class: 'loot-btns' },
         [1, 5, 10, 25].map(n => h('button', { class: 'btn loot', onclick: () => runLoot(n) }, h('b', null, n), n === 1 ? ' item' : ' items')),
-        h('button', { class: 'btn loot fill', disabled: !fillN, title: L.dest === 'vault' ? 'Adds 25 to your vault' : 'Tops your ' + where + ' up to ' + fillTarget + ' items', onclick: () => runLoot(fillN) },
+        h('button', { class: 'btn loot fill', disabled: !fillN, title: L.dest === 'fav' ? 'Adds 25 to your favorites' : 'Tops your ' + (L.dest === 'bank' ? 'bank' : where) + ' up to ' + fillTarget + ' items', onclick: () => runLoot(fillN, true) },
           '💥 FILL IT UP', h('small', null, fillN ? ' +' + fillN : ' (full, bro)'))));
   }
-  function runLoot(n) {
+  function runLoot(n, isFill) {
     const L = S.loot;
+    if (L.dest === 'bank' && !bankEd()) return ensureBank(() => { render(); runLoot(isFill ? Math.max(0, BL3.presets.FILL_TO.bank - bankEd().items.length) : n, isFill); });
+    if (!n) return toast('It\'s already full, bro.');
     const go = () => {
       const got = BL3.presets.randomLoot({ kind: L.kind, mode: L.mode, count: n, classToken: isProfile() ? '' : S.ed.classToken, power: S.power });
       let vaultIds = [];
-      if (L.dest === 'vault') {
+      if (L.dest === 'fav') {
         const before = new Set(X.vault.list().map(x => x.id));
         got.forEach(g => X.vault.add(g.item));
         vaultIds = X.vault.list().filter(x => !before.has(x.id)).map(x => x.id);
         render();
       } else {
         snapshot();
-        got.forEach(g => S.ed.addItem(g.item, { favorite: true }));
+        const target = L.dest === 'bank' ? bankEd() : S.ed;
+        got.forEach(g => target.addItem(g.item, { favorite: true }));
+        if (L.dest === 'bank' && !isProfile()) S.profDirty = true;
         render();
       }
       X.boom(got.some(g => g.mode === 'modded') ? 'modded' : 'op');
       lootReveal(got, () => {
         // reroll: take back this batch, roll again
-        if (L.dest === 'vault') { vaultIds.forEach(id => X.vault.remove(id)); render(); } else undo();
+        if (L.dest === 'fav') { vaultIds.forEach(id => X.vault.remove(id)); render(); } else undo();
         closeModal(); runLoot(n);
       });
     };
@@ -287,14 +374,14 @@
     }));
     modal(h('div', null,
       h('div', { class: 'modal-head' },
-        h('div', null, h('h2', null, '🎲 ', h('span', { class: 'glowup' }, 'LOOT DROP!')), h('div', null, T(LOOT_LINES[Math.floor(Math.random() * LOOT_LINES.length)]) + ' ' + got.length + ' legendaries' + (modded ? ', ' + modded + ' of them modded' : '') + ' → ' + (L.dest === 'vault' ? 'your Vault' : (isProfile() ? 'your Bank' : 'your Backpack')) + '.')),
+        h('div', null, h('h2', null, '🎲 ', h('span', { class: 'glowup' }, 'LOOT DROP!')), h('div', null, T(LOOT_LINES[Math.floor(Math.random() * LOOT_LINES.length)]) + ' ' + got.length + ' legendaries' + (modded ? ', ' + modded + ' of them modded' : '') + ' → ' + (L.dest === 'fav' ? 'your Favorites' : L.dest === 'bank' || isProfile() ? 'your Bank' : 'your Backpack') + '.')),
         h('button', { class: 'btn ghost x', onclick: () => { closeModal(); render(); } }, '✕')),
       grid,
       h('div', { class: 'row', style: 'margin-top:14px' },
         h('button', { class: 'btn primary big', onclick: () => { closeModal(); render(); } }, 'SICK, KEEP \'EM'),
         h('button', { class: 'btn mod big', onclick: reroll }, '🎲 Reroll'),
         h('span', { class: 'spacer' }),
-        L.dest !== 'vault' ? h('button', { class: 'btn', onclick: () => { closeModal(); S.tab = 'inv'; render(); } }, 'Show me →') : h('button', { class: 'btn', onclick: () => { closeModal(); S.tab = 'vault'; render(); } }, 'Open Vault →'))));
+        h('button', { class: 'btn', onclick: () => { closeModal(); S.tab = L.dest === 'fav' ? 'vault' : L.dest === 'bank' ? 'bank' : 'inv'; render(); } }, 'Show me →'))));
   }
 
   function kitPanel() {
@@ -435,7 +522,8 @@
         it.kind === 'weapon' || it.kind === 'grenade' ? h('button', { class: 'btn inf sm', title: 'Ammo regen kit', onclick: () => upgrade(it, 'ammo') }, '∞') : null,
         h('button', { class: 'btn sm', onclick: () => openItem(i) }, '✎ Edit'),
         h('button', { class: 'btn sm', title: 'Stats & part info', onclick: () => openStats(it) }, '📊'),
-        h('button', { class: 'btn sm', title: 'Save to your Vault', onclick: () => toVault(it) }, '⭐'),
+        !isProfile() ? h('button', { class: 'btn sm', title: 'Move to your in-game bank', onclick: () => moveToBank(i) }, '🏦') : null,
+        h('button', { class: 'btn sm', title: 'Add to Favorites (saved in this browser)', onclick: () => toVault(it) }, '⭐'),
         h('button', { class: 'btn sm', title: 'Share card (image)', onclick: () => shareItem(it) }, '🖼'),
         h('button', { class: 'btn sm', title: 'Duplicate', onclick: () => act(() => ed.duplicateItem(i), X.say('dup', { name: it.name }), 'kit') }, '⧉'),
         h('button', { class: 'btn sm', title: 'Copy BL3 code', onclick: () => copy(it.code(), X.say('copied')) }, '📋'),
@@ -530,14 +618,14 @@
       h('div', { class: 'row', style: 'margin-top:14px' },
         h('button', { class: 'btn primary big', onclick: () => { closeModal(); render(); } }, 'LET\'S GOOO'),
         h('button', { class: 'btn', onclick: () => shareItem(it) }, '🖼 Share card'),
-        h('button', { class: 'btn', onclick: () => toVault(it) }, '⭐ Vault it'),
+        h('button', { class: 'btn', onclick: () => toVault(it) }, '⭐ Favorite'),
         h('span', { class: 'spacer' }),
         h('label', { class: 'check muted', style: 'font-size:12px' }, h('input', { type: 'checkbox', onchange: e => X.set('compare', !e.target.checked) }), 'don\'t show this again'))));
   }
   function toVault(it) {
     S.ed.commitItems();
     if (X.vault.add(it)) { X.sfx('coin'); toast(X.say('vault', { name: it.name }), 'ok'); render(); }
-    else toast('Already in your vault, hoarder.');
+    else toast('Already in your favorites, hoarder.');
   }
   async function shareItem(it) {
     try {
@@ -569,7 +657,7 @@
       })),
       h('div', { class: 'row', style: 'margin-top:12px' },
         h('button', { class: 'btn', onclick: () => shareItem(it) }, '🖼 Share card'),
-        h('button', { class: 'btn', onclick: () => toVault(it) }, '⭐ Vault it'),
+        h('button', { class: 'btn', onclick: () => toVault(it) }, '⭐ Favorite'),
         h('button', { class: 'btn', onclick: () => copy(it.code(), X.say('copied')) }, '📋 Copy code'))));
   }
 
@@ -652,7 +740,7 @@
         h('div', { class: 'row', style: 'margin-top:8px' },
           h('button', { class: 'btn', onclick: () => copy(it.code(), X.say('copied')) }, '📋 Copy code'),
           h('button', { class: 'btn', onclick: () => { ed.duplicateItem(i); X.boom('kit'); toast(X.say('dup', { name: it.name }), 'ok'); render(); } }, '⧉ Duplicate'),
-          h('button', { class: 'btn', onclick: () => toVault(it) }, '⭐ Vault'),
+          h('button', { class: 'btn', onclick: () => toVault(it) }, '⭐ Favorite'),
           h('button', { class: 'btn', onclick: () => shareItem(it) }, '🖼 Share'),
           h('span', { class: 'spacer' }),
           h('button', { class: 'btn danger', onclick: () => { ed.removeItem(i); closeModal(); render(); X.boom('delete'); toast(X.say('del', { name: it.name })); } }, '🗑 Delete')));
@@ -787,13 +875,13 @@
   function viewVault(v) {
     const list = X.vault.list();
     v.append(h('div', { class: 'toolbar' },
-      h('b', { style: 'font:900 20px var(--display);letter-spacing:1px' }, '⭐ YOUR VAULT'),
-      h('span', { class: 'muted', style: 'font-size:13px' }, list.length + ' saved · lives in this browser, works across all your saves'),
+      h('b', { style: 'font:900 20px var(--display);letter-spacing:1px' }, '⭐ YOUR FAVORITES'),
+      h('span', { class: 'muted', style: 'font-size:13px' }, list.length + ' saved · kept in this browser (not the game), drop them into any character later'),
       h('span', { class: 'spacer' }),
-      list.length ? h('button', { class: 'btn sm', onclick: () => copy(list.map(x => '# ' + x.name + '\n' + x.code).join('\n\n'), 'All vault codes copied') }, '📋 Copy all') : null,
-      list.length ? h('button', { class: 'btn danger sm', onclick: () => { if (confirm(T('Empty the whole vault? No take-backs, bro.'))) { X.vault.clear(); X.boom('delete'); render(); } } }, '🗑 Empty vault') : null));
+      list.length ? h('button', { class: 'btn sm', onclick: () => copy(list.map(x => '# ' + x.name + '\n' + x.code).join('\n\n'), 'All favorite codes copied') }, '📋 Copy all') : null,
+      list.length ? h('button', { class: 'btn danger sm', onclick: () => { if (confirm(T('Empty all favorites? No take-backs, bro.'))) { X.vault.clear(); X.boom('delete'); render(); } } }, '🗑 Empty favorites') : null));
     if (!list.length) {
-      v.append(h('div', { class: 'empty' }, h('div', { style: 'font-size:44px' }, '⭐'), h('p', null, 'Nothing here yet. Hit ⭐ on any item to stash it here and drop it into any character later.')));
+      v.append(h('div', { class: 'empty' }, h('div', { style: 'font-size:44px' }, '⭐'), h('p', null, 'Nothing here yet. Hit ⭐ on any item to save it here (in this browser) and drop it into any character later.')));
       return;
     }
     v.append(h('div', { class: 'items' }, list.map(x => {
