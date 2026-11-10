@@ -86,6 +86,8 @@
   };
   function anointName(g) {
     const s = short(g);
+    const real = (DATA().partDesc || {})[s];
+    if (real && !/WeaponMayhemLevel/.test(s)) return real.length > 90 ? real.slice(0, 88) + '…' : real;
     if (ANOINT_NAMES[s]) return ANOINT_NAMES[s];
     const m = /WeaponMayhemLevel_(\d+)/.exec(s);
     if (m) return 'Mayhem ' + Number(m[1]);
@@ -270,6 +272,13 @@
     for (const p of chosen) { const r = rules[p.s]; if (r) r[1].forEach(x => excluded.add(x)); }
     const finalParts = chosen.filter(p => uniqSet.has(p.s) || !excluded.has(p.s)).slice(0, 63);
 
+    // 4b) if we know this item's real part list, use a legit "best roll" instead
+    const legitShorts = BL3.legit ? BL3.legit.generate(entry.b, { element, random: !!opts.random }) : null;
+    if (legitShorts && legitShorts.length) {
+      finalParts.length = 0;
+      for (const s_ of legitShorts) { const p = all.find(x => x.s === s_); if (p) finalParts.push(p); }
+    }
+
     // 5) assemble serial
     let manuFull = manufacturerFull(manuName, kind);
     if (!manuFull) {
@@ -333,14 +342,24 @@
   }
 
   /** OP = max level, Mayhem 10, best anointment for your class. Still looks legit. */
+  const isSafe = (ctx) => (ctx && ctx.safe !== undefined ? ctx.safe : !!(BL3.legit && BL3.legit.safe));
+  const ANOINT_PRIORITY = {
+    weapon: ['GPart_All_SkillEnd_WeaponDamage', 'GPart_EG_Generic_ConsecutiveHitsDmgStack', 'GPart_All_WeaponDamage', 'GPart_All_UniqueEnemyDamage'],
+    shield: ['GPart_All_SkillEnd_DamageReduction', 'GPart_All_SkillStart_OverchargeShield', 'GPart_All_SkillEnd_HealthRegen'],
+    grenade: ['GPart_All_GrenadeDamage', 'GPart_EG_GrenadeThrow_GlobalDamage', 'GPart_All_SkillEnd_AddGrenade'],
+  };
   function makeOP(item, ctx = {}) {
     if (!item || !item.canParse) return false;
-    item.level = ctx.level || C().max_level;
+    const safe = isSafe(ctx);
+    if (safe && BL3.legit) BL3.legit.repair(item);
+    item.level = Math.min(ctx.level || C().max_level, C().max_level);
     item.touch();
     if (!item.canParseParts) return true;
-    if (canMayhem(item)) setMayhem(item, 10);
-    const a = bestAnointFor(item, ctx.classToken);
-    if (a && anointPoolFor(item).includes(a)) setAnoint(item, a);
+    if (canMayhem(item) || item.kind === 'weapon') setMayhem(item, 10);
+    const pool = anointPoolFor(item);
+    const a = [bestAnointFor(item, ctx.classToken)].concat(ANOINT_PRIORITY[item.kind] || []).find(x => x && pool.includes(x));
+    if (a) setAnoint(item, a);
+    if (safe) return true; // legit: no extra parts
     if (item.kind === 'relic' || item.kind === 'com') {
       upgradeRarityPart(item);
       const stats = item.parts.filter(p => /_Stat(s)?_|ExtraStat|Stat_Primary|Stat_Secondary/i.test(short(p)));
@@ -351,6 +370,8 @@
 
   /** MODDED = stupid overpowered. Stacks parts and anointments way past what the game drops. */
   function makeModded(item, ctx = {}) {
+    // console-safe mode: modded gear gets deleted by BL3's sanity check, so do OP instead
+    if (isSafe(ctx)) return makeOP(item, ctx);
     if (!item || !item.canParseParts) { if (item && item.canParse) { item.level = C().max_level; item.touch(); } return false; }
     const power = Math.max(1, Math.min(5, ctx.power || 3));
     makeOP(item, ctx);
@@ -401,6 +422,18 @@
   /** Item part of the infinite-ammo kit: ammo regen anointments + huge mags. */
   function makeAmmoKit(item, ctx = {}) {
     if (!item || !item.canParseParts) return false;
+    if (isSafe(ctx)) {
+      // legit version: swap the anointment for an ammo one (only one allowed)
+      const pool = anointPoolFor(item);
+      const want = item.kind === 'weapon'
+        ? ({ Gunner: ['GPart_Gunner_NoAmmoConsumption', 'GPart_Gunner_AutoBear_AmmoRegen'], Operative: ['GPart_Operative_CloneActive_AmmoRegen', 'GPart_Operative_CloneSwapInstaReload'] }[ctx.classToken] || []).concat(['GPart_EG_Generic_KillStackReloadDamage'])
+        : item.kind === 'grenade' ? ['GPart_All_SkillEnd_AddGrenade'] : [];
+      const a = want.find(x => pool.includes(x));
+      if (!a) return false;
+      if (BL3.legit) BL3.legit.repair(item);
+      setAnoint(item, a);
+      return true;
+    }
     if (item.kind === 'weapon') {
       const pool = new Set(anointPoolFor(item));
       const list = ['GPart_Gunner_NoAmmoConsumption', 'GPart_Gunner_AutoBear_AmmoRegen', 'GPart_Operative_CloneActive_AmmoRegen', 'GPart_Operative_CloneSwapInstaReload', 'GPart_EG_Generic_KillStackReloadDamage']
@@ -465,7 +498,7 @@
     if (ed.maxAmmo) { ed.maxSdus(); ed.maxAmmo(); log.push('Max ammo SDUs + full ammo'); }
     if (opts.grenades !== false && ed.maxAmmo) log.push('Max grenade SDU');
     const n = allItems(ed, it => (opts.grenadesOnly ? (it.kind === 'grenade' || it.kind === 'com') : true) && makeAmmoKit(it, ctx));
-    log.push('Ammo-regen kit applied to ' + n + ' items (no-ammo / ammo-regen anointments, stacked mags, Infiniti parts)');
+    log.push(isSafe(ctx) ? 'Ammo anointment on ' + n + ' items (console-safe: one anointment each)' : 'Ammo-regen kit applied to ' + n + ' items (no-ammo / ammo-regen anointments, stacked mags, Infiniti parts)');
     return log;
   }
 
@@ -657,7 +690,8 @@
               if (c.mode === 'op') makeOP(it, Object.assign({}, ctx, { level: c.level }));
               else if (c.mode === 'modded') makeModded(it, ctx);
               ed.addItem(it, { favorite: true });
-              log.push((c.mode === 'modded' ? '☢ ' : c.mode === 'op' ? '🔥 ' : '➕ ') + 'Created ' + (c.mode === 'normal' ? '' : c.mode.toUpperCase() + ' ') + pick.n + (c.element ? ' (' + c.element + ')' : ''));
+              const eff = c.mode === 'modded' && isSafe(ctx) ? 'op' : c.mode;
+              log.push((eff === 'modded' ? '☢ ' : eff === 'op' ? '🔥 ' : '➕ ') + 'Created ' + (eff === 'normal' ? '' : eff.toUpperCase() + ' ') + pick.n + (c.element ? ' (' + c.element + ')' : '') + (eff !== c.mode ? ' (modded is off in console-safe mode)' : ''));
             }
             break;
           }
@@ -671,7 +705,7 @@
 
   BL3.forge = {
     buildItem, makeOP, makeModded, makeAmmoKit, godMode, infiniteAmmo, allItems, searchCatalog,
-    parseCommands, runCommands, anointName, anointPoolFor, setMayhem, setAnoint, canMayhem, partInfo,
+    parseCommands, runCommands, anointName, isSafe, anointPoolFor, setMayhem, setAnoint, canMayhem, partInfo,
     HELP, ELEMENTS, GOD_DEFAULTS,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

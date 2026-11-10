@@ -6,11 +6,12 @@
   'use strict';
 
   // ------------------------------------------------------------------ settings
-  const DEFAULTS = { theme: 'vault', sound: true, shake: true, compare: true, clean: false };
+  const DEFAULTS = { theme: 'vault', sound: true, shake: true, compare: true, clean: false, safe: true };
   let settings = Object.assign({}, DEFAULTS);
   try { Object.assign(settings, JSON.parse(localStorage.getItem('vf_settings') || '{}')); } catch (e) { /* ignore */ }
   function saveSettings() { try { localStorage.setItem('vf_settings', JSON.stringify(settings)); } catch (e) { /* ignore */ } }
-  function set(k, v) { settings[k] = v; saveSettings(); if (k === 'theme') applyTheme(); }
+  function set(k, v) { settings[k] = v; saveSettings(); if (k === 'theme') applyTheme(); if (k === 'safe' && root.BL3 && root.BL3.legit) root.BL3.legit.safe = !!v; }
+  if (root.BL3 && root.BL3.legit) root.BL3.legit.safe = !!settings.safe;
 
   const THEMES = [
     { id: 'vault', name: 'Vault Yellow', a: '#ffd21f', b: '#ffb800' },

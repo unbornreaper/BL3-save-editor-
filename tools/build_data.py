@@ -184,6 +184,84 @@ def pretty_name(n):
     return n
 
 
+def load_legit():
+    """Per-balance legit part lists (sandsmark/borderlands3-save-editor data, from a
+    community spreadsheet). Returns compact tables for js/legit.js."""
+    import io
+    import tarfile
+    names, index, rules = [], {}, {}
+
+    def idx(part):
+        if part not in index:
+            index[part] = len(names)
+            names.append(part)
+        return index[part]
+
+    per_bal = {}
+    for f in ('weapon', 'shield', 'grenade', 'artifact', 'classmod'):
+        with lzma.open(os.path.join(SRC, 'sandsmark', f + '-parts.tsv.xz'), 'rt', encoding='utf-8') as df:
+            lines = df.read().split('\n')
+        hdr = lines[0].split('\t')
+        bi = hdr.index('Balance')
+        for line in lines[1:]:
+            if not line.strip():
+                continue
+            c = line.split('\t')
+            bal = c[bi].lower()
+            cat, mn, mx, _w, part = c[bi + 1:bi + 6]
+            deps = [d.strip() for d in (c[bi + 6] if len(c) > bi + 6 else '').split(',') if d.strip()]
+            excl = [d.strip() for d in (c[bi + 7] if len(c) > bi + 7 else '').split(',') if d.strip()]
+            pi = idx(part)
+            if deps or excl:
+                rules[pi] = [[idx(d) for d in deps], [idx(e) for e in excl]]
+            cats = per_bal.setdefault(bal, {})
+            entry = cats.setdefault(cat, [cat, int(mx), []])
+            entry[1] = max(entry[1], int(mx))
+            if pi not in entry[2]:
+                entry[2].append(pi)
+    set_table, set_index, bal_map = [], {}, {}
+    for bal, cats in per_bal.items():
+        val = list(cats.values())
+        key = json.dumps(val)
+        if key not in set_index:
+            set_index[key] = len(set_table)
+            set_table.append(val)
+        bal_map[bal] = set_index[key]
+
+    # real in-game descriptions
+    desc = {}
+    with tarfile.open(os.path.join(SRC, 'sandsmark', 'descriptions.tar.xz')) as tf:
+        for m in tf.getmembers():
+            if not m.isfile() or not m.name.endswith('.tsv'):
+                continue
+            text = tf.extractfile(m).read().decode('utf-8', 'replace')
+            header = None
+            for line in text.split('\n'):
+                if line.startswith('# Object name'):
+                    header = line[2:].split('\t')
+                    continue
+                if not line.strip() or line.startswith('#'):
+                    continue
+                c = line.split('\t')
+                ki = next((i for i, x in enumerate(c) if '.' in x and x.split('.')[0] == x.split('.')[-1]), None)
+                if ki is None:
+                    continue
+                key = c[ki].split('.')[-1]
+                rest = c[ki + 1:]
+                if header and len(header) > 1 and ki == 0:
+                    bits = []
+                    for h, v in zip(header[1:], rest):
+                        v = v.strip()
+                        if v and v != '-':
+                            bits.append(v if h in ('Effects',) else h + ': ' + v)
+                    txt = ' · '.join(bits)
+                else:
+                    txt = ' '.join(x.strip() for x in rest if x.strip())
+                if txt:
+                    desc[key] = txt
+    return {'names': names, 'rules': rules, 'sets': set_table, 'bal': bal_map}, desc
+
+
 def main():
     serialdb = load('inventoryserialdb.json.xz')
     names = {k: pretty_name(v) for k, v in load('balance_name_mapping.json.xz').items()}
@@ -257,6 +335,8 @@ def main():
     ]
     c = {k: consts[k] for k in keep_consts}
 
+    legit, part_desc = load_legit()
+    print('legit part lists for', len(legit['bal']), 'balances,', len(legit['sets']), 'distinct;', len(part_desc), 'descriptions')
     data = {
         'serialdb': serialdb,
         'names': names,
@@ -267,6 +347,8 @@ def main():
         'partRules': deps,
         'anointPools': {k: [short(x) for x in v] for k, v in pools.items()},
         'catalog': catalog,
+        'legit': legit,
+        'partDesc': part_desc,
         'consts': c,
         'schema': build_schema(),
     }

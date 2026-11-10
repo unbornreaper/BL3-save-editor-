@@ -83,7 +83,7 @@
     if (!p) throw new Error('Unknown preset ' + id);
     const isProfile = ed instanceof BL3.ProfileEditor;
     const ctx = { classToken: isProfile ? '' : ed.classToken, power: opts.power || 3 };
-    const mode = opts.mode || 'modded';
+    const mode = BL3.forge.isSafe(opts) ? 'op' : (opts.mode || 'modded');
     const log = [], added = [];
     for (const spec of p.items) {
       const entry = resolve(spec, ctx.classToken);
@@ -122,6 +122,8 @@
     const poolFor = (k) => {
       if (!pools[k]) {
         let r = F.searchCatalog('', { kind: k, rarity: 5 });
+        // console-safe: only items we can build legitimately
+        if (F.isSafe(opts) && BL3.legit) { const ok = r.filter(c => BL3.legit.setFor(c.b)); if (ok.length) r = ok; }
         if (k === 'com' && opts.classToken) { const mine = r.filter(c => c.n.toLowerCase().includes(opts.classToken.toLowerCase())); if (mine.length) r = mine; }
         pools[k] = r;
       }
@@ -132,7 +134,7 @@
       const entry = pick(poolFor(kind));
       if (!entry) continue;
       const element = kind === 'weapon' ? pick([null, null, 'fire', 'shock', 'corrosive', 'cryo', 'radiation']) : null;
-      const mode = opts.mode === 'mix' ? (Math.random() < 0.5 ? 'op' : 'modded') : (opts.mode || 'op');
+      const mode = F.isSafe(opts) ? 'op' : opts.mode === 'mix' ? (Math.random() < 0.5 ? 'op' : 'modded') : (opts.mode || 'op');
       try {
         const it = F.buildItem(entry, { element });
         const ctx = { classToken: opts.classToken || '', power: mode === 'modded' && opts.mode === 'mix' ? 1 + Math.floor(Math.random() * 5) : (opts.power || 3) };

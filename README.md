@@ -132,6 +132,17 @@ BL3(A/keqg/yMeLAidiwT5/bWQwqG3OuxeEhDH4LZAPWg1a2HG2imaCQ)    ← paste any amoun
 
 ---
 
+## 🔒 Console-safe mode & the sanity check (READ THIS on PS4/PS5)
+BL3 runs a **sanity check** when a character loads and **deletes items that couldn't drop naturally**: stacked parts, multiple anointments, impossible part combos. MODDED gear works on PC setups without the check, but **on PS4/PS5 it gets deleted**.
+
+Console-safe mode is **on by default**:
+* every item shows **✅ LEGIT**, **❔ UNVERIFIED** (no part list to check against; real drops are fine) or **🚫 WILL BE DELETED**
+* **🩹 Fix** (per item, or fix-all from the red banner) repairs items so the game keeps them
+* OP = level 72 + Mayhem 10 + best anointment + best-rated *real* parts. MODDED, kits, piñata and the ammo kit all produce legit gear
+* Save warns you if anything would be deleted and offers to fix it first
+
+The legit part lists cover about 420 items (most guns plus the generic shields/grenades/relics/COMs) and come from [sandsmark's editor](https://github.com/sandsmark/borderlands3-save-editor) data. The check was verified against real PS4 game-made items. Turn console-safe mode off in ⚙ Settings if you're on PC and want the chaos.
+
 ## ❓ Good to know
 
 * **Modded gear is for offline / solo play.** In rare cases a heavily stacked item can look glitchy or crash the game. Turn the power slider down if that happens.
@@ -166,6 +177,7 @@ Built on years of community reverse-engineering work:
 
 * **Gibbed**: save encryption, protobuf definitions, item serial obfuscation
 * **apocalyptech / CJ Kucera**: [bl3-cli-saveedit](https://github.com/apocalyptech/bl3-cli-saveedit) (zlib license): inventory serial DB, balance names, game constants, editing logic reference
+* **sandsmark**: [borderlands3-save-editor](https://github.com/sandsmark/borderlands3-save-editor): per-item legit part lists and real in-game part/anointment descriptions (from a community spreadsheet)
 * **FromDarkHell**: [BL3SaveEditor](https://github.com/FromDarkHell/BL3SaveEditor) (GPL-3.0): PS4 keys, part names, part dependency data, anointment pools, demo save
 
 Licensed under **GPL-3.0** (see `LICENSE`). Not affiliated with Gearbox or 2K.

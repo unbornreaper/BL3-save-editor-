@@ -97,7 +97,16 @@
     ps4: 'Saves a real PS4 .sav. Other BL3 editors can open this one. Convert back to Save Wizard format before putting it on your console.',
     pc: 'Saves a PC .sav (for PC players / PC editors).',
   };
-  function saveFile() {
+  function saveFile(force) {
+    const bad = badItems(S.ed).length + (S.prof && !isProfile() ? badItems(S.prof).length : 0);
+    if (bad && !force) {
+      return modal(h('div', null,
+        h('h2', null, '🚫 Hold up'),
+        h('p', null, h('b', null, bad + ' item' + (bad === 1 ? '' : 's')), ' in this save will get ', h('b', null, 'deleted by the game'), ' when you load your character (BL3\'s sanity check). Fix them first?'),
+        h('div', { class: 'row' },
+          h('button', { class: 'btn primary big', onclick: () => { closeModal(); fixAll(S.ed); if (S.prof && !isProfile()) fixAll(S.prof); saveFile(true); } }, '🩹 Fix them & save'),
+          h('button', { class: 'btn ghost big', onclick: () => { closeModal(); saveFile(true); } }, 'Save anyway (PC)'))));
+    }
     try {
       S.ed.commitItems();
       const mode = S.saveAs || 'ps4';
@@ -202,6 +211,34 @@
     ].filter(Boolean));
   }
 
+  // ------------------------------------------------------------------ legit / sanity check
+  const LEGIT_BADGE = {
+    legit: ['✅ LEGIT', 'badge legit', 'Passes BL3\'s sanity check: the game will keep it.'],
+    unknown: ['❔ UNVERIFIED', 'badge', 'No part list for this item, so it can\'t be verified. Real drops and OP\'d real drops are fine.'],
+    modded: ['🚫 WILL BE DELETED', 'badge bad', 'BL3 deletes items like this when your character loads (sanity check).'],
+  };
+  function legitBadge(it) {
+    const r = BL3.legit.check(it);
+    const [txt, cls, tip] = LEGIT_BADGE[r.status];
+    return h('span', { class: cls, title: tip + (r.problems.length ? '\n• ' + r.problems.join('\n• ') : '') }, txt);
+  }
+  function badItems(ed) { return ed.items.filter(e => e.item && BL3.legit.check(e.item).status === 'modded'); }
+  function fixAll(ed, after) {
+    return act(() => { let n = 0; for (const e of ed.items) if (e.item && BL3.legit.check(e.item).status === 'modded') { BL3.legit.repair(e.item); n++; } if (ed === S.prof) S.profDirty = true; return n; },
+      n => '🩹 Fixed ' + n + ' item' + (n === 1 ? '' : 's') + '. The game will keep them now.', 'op');
+  }
+  function sanityBanner() {
+    const bad = badItems(S.ed);
+    const bankBad = S.prof && !isProfile() ? badItems(S.prof) : [];
+    if (!bad.length && !bankBad.length) return null;
+    return h('div', { class: 'panel danger-banner' },
+      h('div', null, h('b', null, '🚫 ' + (bad.length + bankBad.length) + ' item' + (bad.length + bankBad.length === 1 ? '' : 's') + ' will get DELETED by the game'),
+        h('div', { class: 'muted', style: 'font-size:13px;margin-top:4px' }, 'BL3 runs a "sanity check" when your character loads and deletes gear with impossible parts (stacked parts, multiple anointments…). Hit fix and they\'ll stay legit and still max level, Mayhem 10, anointed.')),
+      h('div', { class: 'row' },
+        bad.length ? h('button', { class: 'btn primary big', onclick: () => fixAll(S.ed) }, '🩹 Fix ' + bad.length + (isProfile() ? ' in bank' : ' in backpack')) : null,
+        bankBad.length ? h('button', { class: 'btn primary big', onclick: () => fixAll(S.prof) }, '🩹 Fix ' + bankBad.length + ' in bank') : null));
+  }
+
   // ------------------------------------------------------------------ dashboard
   function heroBtn(cls, title, desc, ico, onclick) {
     return h('button', { class: 'hero-btn ' + cls, onclick }, h('div', { class: 't' }, title), h('div', { class: 'd' }, desc), h('div', { class: 'ico' }, ico));
@@ -209,6 +246,8 @@
 
   function viewDash(v) {
     const ed = S.ed;
+    const banner = sanityBanner();
+    if (banner) v.append(banner);
     if (!isProfile()) {
       v.append(h('div', { class: 'grid g4', style: 'margin-bottom:16px' },
         statCard('Character', ed.name || '—', ed.className),
@@ -219,8 +258,8 @@
       v.append(h('div', { class: 'grid g3', style: 'margin-bottom:16px' },
         heroBtn('god', 'GOD MODE', 'Lvl 72, max cash & eridium, all SDUs, full ammo, every slot, Mayhem 10, TVHM, huge Guardian Rank, skill points, all vehicles.', '⚡', openGodModal),
         heroBtn('op', 'OP EVERYTHING', 'Every item in your backpack → level 72, Mayhem 10 and the best anointment for your class.', '🔥', () => act(() => F.allItems(ed, it => F.makeOP(it, ctx())), n => '🔥 ' + X.say('opAll', { n }), 'op')),
-        heroBtn('mod', 'MODDED EVERYTHING', 'Stupid overpowered. Stacks parts, elements & up to 15 anointments on every item. Offline fun only.', '☢', () => confirmModded(() => act(() => F.allItems(ed, it => F.makeModded(it, ctx())), n => X.say('moddedAll', { n }), 'modded'))),
-        heroBtn('inf', '∞ INFINITE AMMO', 'Max ammo + SDUs, plus no-ammo / ammo-regen anointments, stacked mags & Infiniti parts on every gun.', '∞', () => act(() => F.infiniteAmmo(ed), () => X.say('ammo'), 'op')),
+        heroBtn('mod', 'MODDED EVERYTHING', X.settings.safe ? '🔒 Console-safe: makes the strongest LEGIT version of everything (modded gear gets deleted on console).' : 'Stupid overpowered. Stacks parts, elements & up to 15 anointments on every item. PC / offline only.', '☢', () => confirmModded(() => act(() => F.allItems(ed, it => F.makeModded(it, ctx())), n => X.say('moddedAll', { n }), 'modded'))),
+        heroBtn('inf', '∞ INFINITE AMMO', X.settings.safe ? 'Max ammo + SDUs, and the best ammo anointment for your class on every gun (Moze: no ammo used with Iron Bear, Zane: ammo regen).' : 'Max ammo + SDUs, plus no-ammo / ammo-regen anointments, stacked mags & Infiniti parts on every gun.', '∞', () => act(() => F.infiniteAmmo(ed), () => X.say('ammo'), 'op')),
         heroBtn('nade', '∞ INFINITE GRENADES', 'Max grenade SDU + full grenades, grenade-regen anointment on nades, stacked grenade capacity on class mods.', '💣', () => act(() => F.runCommands(ed, 'infinite grenades'), () => X.say('nades'), 'op')),
         heroBtn('', 'NEW GEAR', 'Build any legendary in the game from scratch — weapons, shields, grenades, relics, class mods.', '🔨', () => { S.tab = 'forge'; render(); }),
       ));
@@ -321,7 +360,7 @@
     else if (L.dest === 'bank') { fillTarget = BL3.presets.FILL_TO.bank; fillN = bank ? Math.max(0, fillTarget - bank.items.length) : fillTarget; }
     else { fillTarget = BL3.presets.FILL_TO[where]; fillN = Math.max(0, fillTarget - S.ed.items.length); }
     return h('div', { class: 'panel pinata', style: 'margin-bottom:16px' },
-      h('h3', null, '🎲 Loot Piñata', h('small', null, 'random legendaries, already OP / MODDED. Just whack it.')),
+      h('h3', null, '🎲 Loot Piñata', h('small', null, X.settings.safe ? 'random legendaries, already OP, all legit so the game keeps them 🔒' : 'random legendaries, already OP / MODDED. Just whack it.')),
       h('div', { class: 'loot-opts' },
         h('div', null, h('div', { class: 'lo-l' }, 'WHAT'), seg('kind', [['any', '🎲 Anything'], ['weapon', '🔫 Guns'], ['shield', '🛡 Shields'], ['grenade', '💣 Nades'], ['relic', '🔮 Relics'], ['com', '🎓 COMs']])),
         h('div', null, h('div', { class: 'lo-l' }, 'POWER'), seg('mode', [['op', '🔥 OP'], ['modded', '☢ MODDED'], ['mix', '🎰 Mix']])),
@@ -399,6 +438,15 @@
     return h('div', { class: 'panel' }, h('div', { class: 'muted', style: 'font-size:12px;text-transform:uppercase;letter-spacing:.6px' }, label), h('div', { class: 'stat-big' }, big), h('div', { class: 'muted', style: 'font-size:13px' }, sub));
   }
   function confirmModded(go) {
+    if (X.settings.safe) {
+      if (localStorage.getItem('vf_safe_seen')) return go();
+      return modal(h('div', null,
+        h('h2', null, '🔒 Console-safe mode is ON'),
+        h('p', null, 'On PS4 / PS5 / Xbox, BL3 runs a sanity check when your character loads and ', h('b', null, 'deletes modded gear'), ' (stacked parts, multiple anointments, impossible combos).'),
+        h('p', null, 'So MODDED gives you the strongest ', h('b', null, 'legit'), ' version instead: level 72, Mayhem 10, the best anointment and the best-rated real parts. The game keeps those.'),
+        h('p', { class: 'muted' }, 'Playing on PC without the check? Turn off console-safe mode in ⚙ Settings to unlock the stupid stuff.'),
+        h('div', { class: 'row' }, h('button', { class: 'btn primary big', onclick: () => { localStorage.setItem('vf_safe_seen', '1'); closeModal(); go(); } }, 'Got it, make it OP'), h('button', { class: 'btn ghost big', onclick: closeModal }, 'Cancel'))));
+    }
     if (localStorage.getItem('vf_mod_ok')) return go();
     modal(h('div', null,
       h('h2', null, '☢ Heads up'),
@@ -484,6 +532,7 @@
       h('div', { class: 'sep' }),
       powerSlider(),
       h('span', { class: 'spacer' }),
+      (() => { const n = badItems(ed).length; return n ? h('button', { class: 'btn primary sm', onclick: () => fixAll(ed) }, '🩹 FIX ' + n + ' (would be deleted)') : null; })(),
       h('button', { class: 'btn sm', onclick: importCodesModal }, '📥 Import codes'),
       h('button', { class: 'btn sm', onclick: exportCodesModal }, '📤 Export codes'),
     ));
@@ -509,6 +558,7 @@
       h('div', { class: 'meta' },
         h('span', { class: 'badge lvl' }, 'LVL ' + it.level),
         it.mayhem ? h('span', { class: 'badge mh' }, 'M' + it.mayhem) : null,
+        legitBadge(it),
         eq ? h('span', { class: 'badge eq' }, 'EQUIPPED · ' + eq) : null,
         flags & 2 ? h('span', { class: 'badge fav' }, '★') : null,
         modded ? h('span', { class: 'badge mod' }, '☢ MODDED') : null,
@@ -517,6 +567,7 @@
       anoints.length ? h('div', { class: 'anoint' }, '✦ ' + F.anointName(anoints[0]) + (anoints.length > 1 ? '  (+' + (anoints.length - 1) + ' more)' : '')) : null,
       (() => { const est = BL3.stats.estimate(it); return est && est.vibe.length ? h('div', { class: 'vibe', onclick: () => openStats(it), title: 'Tap for full stats' }, T(est.vibe.join('  ·  '))) : null; })(),
       h('div', { class: 'actions' },
+        BL3.legit.check(it).status === 'modded' ? h('button', { class: 'btn primary sm', title: 'Make it pass the sanity check', onclick: () => act(() => BL3.legit.repair(it), '🩹 ' + it.name + ' fixed. The game will keep it.', 'op') }, '🩹 Fix') : null,
         h('button', { class: 'btn op sm', title: 'Level 72 + Mayhem 10 + best anointment', onclick: () => upgrade(it, 'op') }, '🔥 OP'),
         h('button', { class: 'btn mod sm', title: 'Stupid overpowered', onclick: () => confirmModded(() => upgrade(it, 'modded')) }, '☢ MODDED'),
         it.kind === 'weapon' || it.kind === 'grenade' ? h('button', { class: 'btn inf sm', title: 'Ammo regen kit', onclick: () => upgrade(it, 'ammo') }, '∞') : null,
@@ -911,6 +962,7 @@
       h('div', { class: 'themes' }, X.THEMES.map(t => h('button', { class: 'theme' + (st.theme === t.id ? ' on' : ''), style: '--a:' + t.a + ';--b:' + t.b, onclick: () => { X.set('theme', t.id); X.sfx('click'); openSettings(); } }, h('i'), t.name))),
       h('h3', { style: 'font:900 18px var(--display);margin:16px 0 8px' }, '🔊 Vibes'),
       h('div', { class: 'grid g2' },
+        tog('safe', '🔒 Console-safe mode', 'PS4 / PS5 / Xbox: only make gear the game\'s sanity check keeps. Turn off on PC for modded chaos.'),
         tog('sound', 'Sound effects', 'ka-chunk, zaps & booms'),
         tog('shake', 'Screen shake', 'when stuff gets broken'),
         tog('compare', 'Glow-up popup', 'before/after stats on OP / MODDED'),
@@ -935,7 +987,7 @@
   $('#btnOpen').onclick = pickFile;
   $('#btnSettings').onclick = openSettings;
   $('#btnOpen2').onclick = pickFile;
-  $('#btnSave').onclick = saveFile;
+  $('#btnSave').onclick = () => saveFile();
   $('#btnUndo').onclick = undo;
   $('#btnDemo').onclick = () => {
     if (!window.BL3_DEMO) return toast('Demo save not bundled', 'err');

@@ -135,6 +135,11 @@
   };
 
   function describePart(full, itemKind) {
+    const real = (DATA().partDesc || {})[short(full)];
+    const guess = describePartGuess(full, itemKind);
+    return real ? '📜 ' + real + (guess && !/^Part:/.test(guess) ? '  —  ' + guess : '') : guess;
+  }
+  function describePartGuess(full, itemKind) {
     const s = short(full);
     const d = DATA();
     const name = d.partNames[s];

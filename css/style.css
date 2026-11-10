@@ -365,3 +365,8 @@ body[data-theme=stealth] .item .name, body[data-theme=stealth] .cat-item b { tex
 .rv-v { font-size: 11.5px; color: #ffe27a; }
 @keyframes drop { 60% { opacity: 1; transform: scale(1.08) rotate(1deg); } 100% { opacity: 1; transform: none; } }
 @media (max-width: 640px) { .reveal { grid-template-columns: 1fr 1fr; } .btn.loot { padding: 10px 12px; font-size: 14px; } }
+
+/* ---------- sanity check ---------- */
+.badge.legit { color: #000; background: #7dff9b; border-color: #000; }
+.badge.bad { color: #fff; background: #c41d1d; border-color: #000; animation: pulse 1.4s ease-in-out infinite; }
+.danger-banner { display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 16px; border: 2px solid #c41d1d; background: linear-gradient(135deg, #3a0f12, var(--panel) 60%); }

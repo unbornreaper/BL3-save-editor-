@@ -146,7 +146,7 @@ t('Every catalog item builds, OPs, mods and re-parses', () => {
       for (const mode of ['normal', 'op', 'modded']) {
         const it = BL3.forge.buildItem(c, {});
         if (mode === 'op') BL3.forge.makeOP(it, { classToken: 'Operative' });
-        if (mode === 'modded') BL3.forge.makeModded(it, { classToken: 'Gunner', power: 5 });
+        if (mode === 'modded') BL3.forge.makeModded(it, { classToken: 'Gunner', power: 5, safe: false });
         const back = BL3.Item.fromCode(it.code());
         if (!back.canParseParts) throw new Error('unparseable');
         if (back.parts.length < 2) throw new Error('too few parts');
@@ -167,14 +167,14 @@ t('OP weapon = lvl72 + Mayhem 10 + 1 anointment', () => {
 });
 t('Modded weapon stacks parts and anointments', () => {
   const it = BL3.Item.fromCode(CODES.crader);
-  BL3.forge.makeModded(it, { classToken: 'Operative', power: 3 });
+  BL3.forge.makeModded(it, { classToken: 'Operative', power: 3, safe: false });
   assert.ok(it.parts.length > 15);
   assert.ok(it.generics.length >= 10);
   assert.strictEqual(BL3.Item.fromCode(it.code()).mayhem, 10);
 });
 t('Modded shield stacks augments', () => {
   const it = BL3.Item.fromCode(CODES.transformer);
-  BL3.forge.makeModded(it, {});
+  BL3.forge.makeModded(it, { safe: false });
   assert.ok(it.parts.length > 10);
 });
 
@@ -235,7 +235,7 @@ t('Every catalog item gets stats; modded beats normal', () => {
     assert.ok(e && (e.bars.length || e.traits.length), c.n);
   }
   const n = BL3.Item.fromCode(CODES.crader), m = BL3.Item.fromCode(CODES.crader);
-  BL3.forge.makeModded(m, { power: 5 });
+  BL3.forge.makeModded(m, { power: 5, safe: false });
   const dmg = (it) => BL3.stats.estimate(it).bars.find(b => b.key === 'dmg').value;
   assert.ok(dmg(m) > dmg(n) + 5);
   assert.strictEqual(BL3.stats.estimate(n).bars.find(b => b.key === 'stab').text, 'no recoil');
@@ -276,6 +276,50 @@ t('Loot piñata: random OP/MODDED legendaries of every kind, saves & reloads', (
   assert.ok(ed2.items.every(e => e.item && e.item.canParseParts && e.item.level === 72));
   const log = BL3.forge.runCommands(BL3.open(pcBytes), 'loot 7 modded');
   assert.ok(/7 random MODDED/.test(log[0]), log[0]);
+});
+
+console.log('Legit / console-safe mode');
+t('Real game items pass the legit check', () => {
+  for (const c of [CODES.crader, CODES.transformer]) {
+    const r = BL3.legit.check(BL3.Item.fromCode(c));
+    assert.notStrictEqual(r.status, 'modded', r.problems.join('; '));
+  }
+});
+t('Modded items fail the check, repair makes them pass', () => {
+  const it = BL3.Item.fromCode(CODES.crader);
+  BL3.forge.makeModded(it, { power: 5, safe: false });
+  const r = BL3.legit.check(it);
+  assert.strictEqual(r.status, 'modded');
+  assert.ok(r.problems.length >= 2);
+  BL3.legit.repair(it);
+  const r2 = BL3.legit.check(BL3.Item.fromCode(it.code()));
+  assert.strictEqual(r2.status, 'legit', r2.problems.join('; '));
+  assert.ok(it.parts.length <= 20);
+});
+t('Console-safe: every forged + OP item with a part list passes the check', () => {
+  const bad = [];
+  let covered = 0;
+  for (const c of BL3_DATA.catalog) {
+    if (!BL3.legit.setFor(c.b)) continue;
+    covered++;
+    for (const el of [null, 'fire']) {
+      const it = BL3.forge.buildItem(c, { element: el });
+      BL3.forge.makeOP(it, { classToken: 'Operative' });
+      const r = BL3.legit.check(BL3.Item.fromCode(it.code()));
+      if (r.status !== 'legit') bad.push(c.n + ': ' + r.problems.join('; '));
+      if (it.level !== 72 || it.anoints.length > 1) bad.push(c.n + ': level/anoint');
+    }
+  }
+  assert.ok(covered > 300, 'covered ' + covered);
+  assert.deepStrictEqual(bad.slice(0, 10), []);
+});
+t('Console-safe: MODDED / kits / piñata / ammo kit produce legit items', () => {
+  const ed = BL3.open(pcBytes);
+  BL3.presets.run(ed, 'boss', { mode: 'modded' });
+  BL3.presets.randomLoot({ mode: 'mix', count: 20 }).forEach(g => ed.addItem(g.item));
+  BL3.forge.runCommands(ed, 'modded fingerbiter\ninfinite ammo');
+  const bad = ed.items.map(e => [e.item.name, BL3.legit.check(e.item)]).filter(([, r]) => r.status === 'modded');
+  assert.deepStrictEqual(bad.map(([n, r]) => n + ': ' + r.problems.join('; ')), []);
 });
 
 console.log('Profile');
