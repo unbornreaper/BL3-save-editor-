@@ -1,0 +1,86 @@
+{
+  "name": "vault-forge",
+  "productName": "Vault Forge",
+  "version": "1.0.0",
+  "description": "Borderlands 3 save editor for PS4/PS5 (Save Wizard) and PC saves",
+  "main": "main.js",
+  "author": "unbornreaper",
+  "license": "GPL-3.0",
+  "private": true,
+  "scripts": {
+    "prepare-app": "node -e \"const fs=require('fs');fs.mkdirSync('app',{recursive:true});fs.copyFileSync('../dist/BL3-Save-Editor.html','app/index.html')\"",
+    "start": "npm run prepare-app && electron .",
+    "dist": "npm run prepare-app && electron-builder --publish never",
+    "dist:win": "npm run prepare-app && electron-builder --win --publish never",
+    "dist:mac": "npm run prepare-app && electron-builder --mac --publish never",
+    "dist:linux": "npm run prepare-app && electron-builder --linux --publish never"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.unbornreaper.vaultforge",
+    "productName": "Vault Forge",
+    "artifactName": "Vault-Forge-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "app/**",
+      "build/icon.png"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "portable": {
+      "artifactName": "Vault-Forge-${version}-portable.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "artifactName": "Vault-Forge-${version}-setup.exe"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.utilities"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "build/icon.png",
+      "category": "Utility"
+    },
+    "publish": null
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/unbornreaper/bl3-save-editor-.git"
+  }
+}

@@ -1,0 +1,66 @@
+# Builds the Vault Forge desktop app (Windows .exe, Mac .dmg, Linux AppImage)
+# and publishes them as a GitHub Release people can download.
+# Run it: Actions tab -> "Desktop app" -> Run workflow, or push a tag like v1.0.0
+name: Desktop app
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install
+        working-directory: desktop
+        run: npm ci --no-audit --no-fund
+      - name: Build
+        working-directory: desktop
+        run: npm run dist
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vault-forge-${{ matrix.os }}
+          path: |
+            desktop/release/*.exe
+            desktop/release/*.dmg
+            desktop/release/*.AppImage
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('desktop-build-{0}', github.run_number) }}
+          target_commitish: ${{ github.sha }}
+          name: Vault Forge desktop ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('build {0}', github.run_number) }}
+          files: out/*
+          body: |
+            ## ⚡ Vault Forge: Borderlands 3 Save Editor (desktop)
+
+            **Windows:** download `Vault-Forge-…-setup.exe` (installer, adds a desktop shortcut) or `Vault-Forge-…-portable.exe` (no install, just run it).
+            **Mac:** `.dmg`. **Linux:** `.AppImage`.
+
+            Windows may say "Windows protected your PC" because the app isn't code-signed. Click **More info → Run anyway**.
+            On Mac, right-click the app → **Open** the first time.
+
+            Works fully offline. Your saves never leave your computer.

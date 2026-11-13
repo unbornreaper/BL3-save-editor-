@@ -19,6 +19,15 @@ That one file contains the whole editor.
 
 ---
 
+## 🖥 Desktop app (Windows / Mac / Linux)
+Prefer a real app with a desktop icon? Grab it from the **[Releases](../../releases)** page:
+* **Windows:** `Vault-Forge-…-setup.exe` (installer + desktop shortcut) or `Vault-Forge-…-portable.exe` (no install)
+* **Mac:** `.dmg` · **Linux:** `.AppImage`
+
+It's the same editor in its own window and works fully offline. The app isn't code-signed, so Windows may show "Windows protected your PC": click **More info → Run anyway**.
+
+*Making a new release:* GitHub → **Actions** → **Desktop app** → **Run workflow** (or push a tag like `v1.1.0`). GitHub builds all three versions and posts them on the Releases page. Source: `desktop/` (Electron).
+
 ## 🎮 PS5 (PS4 version of the game) step by step
 
 1. **PS5:** Settings → Saved Data and Game/App Settings → Saved Data (PS4) → **Copy to USB drive** → Borderlands 3.
